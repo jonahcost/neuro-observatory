@@ -1,0 +1,15 @@
+{
+  "name": "@neuro-observatory/source",
+  "version": "0.0.0",
+  "license": "MIT",
+  "scripts": {},
+  "private": true,
+  "dependencies": {},
+  "devDependencies": {
+    "@nx/js": "24.0.2",
+    "@nx/workspace": "24.0.2",
+    "nx": "24.0.2",
+    "typescript": "~6.0.3"
+  },
+  "packageManager": "yarn@1.22.22"
+}
