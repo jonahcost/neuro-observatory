@@ -1,0 +1,29 @@
+{
+  "name": "neuro-engine",
+  "projectType": "application",
+  "sourceRoot": "services/neuro-engine/src",
+  "targets": {
+    "serve": {
+      "executor": "nx:run-commands",
+      "options": {
+        "cwd": "services/neuro-engine",
+        "command": "uv run uvicorn neuro_engine.main:app --reload --host 127.0.0.1 --port 8000"
+      },
+      "cache": false
+    },
+    "test": {
+      "executor": "nx:run-commands",
+      "options": {
+        "cwd": "services/neuro-engine",
+        "command": "uv run pytest"
+      }
+    },
+    "lint": {
+      "executor": "nx:run-commands",
+      "options": {
+        "cwd": "services/neuro-engine",
+        "command": "uv run ruff check ."
+      }
+    }
+  }
+}

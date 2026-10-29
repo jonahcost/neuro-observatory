@@ -43,3 +43,37 @@ Thumbs.db
 .nx/migrate-runs
 .claude/worktrees
 .claude/settings.local.json
+
+vite.config.*.timestamp*
+vitest.config.*.timestamp*
+.vitest
+
+# Neuro Observatory datasets
+/data/
+/datasets/
+/recordings/
+/models/
+/artifacts/
+
+# Medical and physiological data
+*.dcm
+*.nii
+*.nii.gz
+*.edf
+*.bdf
+*.xdf
+
+# Python
+.venv/
+__pycache__/
+.pytest_cache/
+.ruff_cache/
+*.pyc
+
+# Local configuration
+.env
+.env.local
+.env.*.local
+
+# OS
+.DS_Store
