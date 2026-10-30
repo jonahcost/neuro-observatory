@@ -58,3 +58,21 @@ JSON-level rules shared by both languages: integer fields accept numbers with a 
 5. Verify: `yarn nx run-many -p @neuro-observatory/protocol,neuro-engine,desktop -t test typecheck lint` and `yarn nx run @neuro-observatory/protocol:check-generated`.
 
 `check-generated` (and `src/generated.spec.ts`) fail when the committed types drift from the schema.
+
+## Anatomy asset contract v1
+
+Decision record: [ADR-0010](../../docs/architecture/decisions/ADR-0010-reference-anatomy-foundation.md); frames and rendering: [ANATOMY.md](../../docs/architecture/ANATOMY.md). Served read-only by the engine under `/api/anatomy/v1` (HTTP, not the EEG WebSocket). Independent of EEG v2; neither version changes the other.
+
+| Artifact | Role |
+| --- | --- |
+| `schemas/anatomy-asset.v1.schema.json` | Canonical schema for `anatomy.catalog` and `anatomy.asset` (`schemaVersion: 1`) |
+| `src/generated/anatomy-asset.v1.ts` | Generated types (same `generate-types` / `check-generated` targets) |
+| `src/anatomy.ts` | `parseAnatomyCatalog`, `parseAnatomyAsset` (Ajv + semantic checks), `surfaceGeometryIssue`, `vertexLabelsIssue` |
+| `fixtures/anatomy-v1/` | Valid/invalid manifests and catalogs, registered in `manifest.json`, run by TS and Python |
+| `services/neuro-engine/src/neuro_engine/protocol/anatomy_v1.py` | Pydantic mirror |
+
+- Geometry is FreeSurfer surface RAS in millimetres (`coordinateFrame`, `units` are fixed constants), at full resolution and in source vertex order. `transforms` carry 4×4 matrices to `scanner-ras` (and `mni305-ras` for fsaverage) with their source.
+- Buffers are little-endian files listed in the manifest with `dtype`, `byteLength` and `sha256`: positions `float32[3N]`, triangle indices `uint32[3M]`, per-vertex atlas labels `int32[N]` with `-1` = unlabelled. Clients must verify length and hash before use.
+- `anatomyKind` is `template`, `reference-subject` or `personal`; `acquisition.source` states where the field strength and sequence come from (`sidecar`, `dataset-readme`, `site-documentation`, `user-declared`, `not-applicable`).
+- `provenance.sources[].path` is relative to the engine data root and never absolute. Manifests carry no MRI voxels and no participant demographics.
+- Semantic checks beyond the schema: unique hemisphere/surface and hemisphere/atlas pairs; all surfaces of one hemisphere have the same vertex count (vertex correspondence); dtype and byte lengths consistent with counts; no buffer file referenced twice; finite, ordered bounds; parcellations match their hemisphere's vertex count and have unique label indices; transforms start at the asset frame, are finite and affine; catalog asset IDs unique and the default listed.

@@ -5,6 +5,7 @@ from __future__ import annotations
 import os
 from collections.abc import Mapping
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Literal
 
 from neuro_engine.acquisition.base import DeviceConfigError
@@ -34,6 +35,8 @@ class EngineSettings:
     status_interval_s: float = 1.0
     allowed_origins: frozenset[str] = DEFAULT_ALLOWED_ORIGINS
     reconnect: ReconnectPolicy = field(default_factory=ReconnectPolicy)
+    # None selects NEURO_ENGINE_DATA_DIR or the per-user default (see neuro_engine.datasets.storage).
+    data_dir: Path | None = None
 
     def __post_init__(self) -> None:
         if self.device != "synthetic":
@@ -69,7 +72,9 @@ class EngineSettings:
         except DeviceConfigError as exc:
             raise SettingsError(str(exc)) from None
         origins = get("ALLOWED_ORIGINS")
+        data_dir = get("DATA_DIR")
         return cls(
+            data_dir=Path(data_dir).expanduser() if data_dir else None,
             device=get("DEVICE") or "synthetic",
             synthetic=synthetic,
             live_view_queue_blocks=get_int("LIVE_VIEW_QUEUE_BLOCKS", 25),

@@ -24,6 +24,14 @@
         "command": "uv run pytest"
       }
     },
+    "test-integration": {
+      "executor": "nx:run-commands",
+      "options": {
+        "cwd": "services/neuro-engine",
+        "command": "uv run --extra neuroimaging pytest -m integration tests/integration"
+      },
+      "cache": false
+    },
     "lint": {
       "executor": "nx:run-commands",
       "options": {

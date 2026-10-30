@@ -3,6 +3,7 @@ import { resolve } from 'node:path';
 import type { ParseErrorKind } from '../validate';
 
 export const FIXTURE_ROOT = resolve(import.meta.dirname, '../../fixtures/v2');
+export const ANATOMY_FIXTURE_ROOT = resolve(import.meta.dirname, '../../fixtures/anatomy-v1');
 
 export interface ManifestCase {
   file: string;
@@ -11,14 +12,14 @@ export interface ManifestCase {
   context?: string;
 }
 
-export function readFixtureText(relativePath: string): string {
-  return readFileSync(resolve(FIXTURE_ROOT, relativePath), 'utf8');
+export function readFixtureText(relativePath: string, root = FIXTURE_ROOT): string {
+  return readFileSync(resolve(root, relativePath), 'utf8');
 }
 
-export function readFixtureJson<T>(relativePath: string): T {
-  return JSON.parse(readFixtureText(relativePath)) as T;
+export function readFixtureJson<T>(relativePath: string, root = FIXTURE_ROOT): T {
+  return JSON.parse(readFixtureText(relativePath, root)) as T;
 }
 
-export function manifestCases(): ManifestCase[] {
-  return readFixtureJson<{ cases: ManifestCase[] }>('manifest.json').cases;
+export function manifestCases(root = FIXTURE_ROOT): ManifestCase[] {
+  return readFixtureJson<{ cases: ManifestCase[] }>('manifest.json', root).cases;
 }
