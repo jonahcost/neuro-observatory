@@ -10,7 +10,7 @@ from typing import Any
 
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse, JSONResponse, Response
+from fastapi.responses import JSONResponse, Response
 
 from neuro_engine.anatomy.assets import AssetStore
 from neuro_engine.anatomy.errors import AnatomyError
@@ -57,8 +57,8 @@ def create_anatomy_app(settings: EngineSettings) -> FastAPI:
         return Response(assets.manifest_bytes(asset_id), media_type="application/json", headers={"Cache-Control": "no-cache"})
 
     @app.get("/assets/{asset_id}/files/{file_name}")
-    def buffer(asset_id: str, file_name: str) -> FileResponse:
-        path = store().buffer_path(asset_id, file_name)
-        return FileResponse(path, media_type="application/octet-stream", headers={"Cache-Control": IMMUTABLE})
+    def buffer(asset_id: str, file_name: str) -> Response:
+        data = store().buffer_bytes(asset_id, file_name)
+        return Response(data, media_type="application/octet-stream", headers={"Cache-Control": IMMUTABLE})
 
     return app

@@ -7,6 +7,7 @@ process; it is read solely to verify integrity (gzip CRC, finite values).
 from __future__ import annotations
 
 import gzip
+import math
 import zlib
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -20,6 +21,7 @@ from numpy.typing import NDArray
 from neuro_engine.anatomy.errors import AnatomyError
 
 VolumeFormat = Literal["nifti1", "nifti2", "mgh"]
+AffineSource = Literal["qform", "sform", "mgh"]
 
 _SUPPORTED_SUFFIXES = {".nii": "nifti", ".nii.gz": "nifti", ".mgz": "mgh", ".mgh": "mgh"}
 _REJECTED_SUFFIXES = {
@@ -38,6 +40,16 @@ MAX_RECOMMENDED_ANISOTROPY = 1.5
 MIN_RECOMMENDED_FOV_MM = 150.0
 # Header voxel sizes carry float noise (e.g. a nominal 1.2 mm slice stored as 1.200004).
 VOXEL_SIZE_TOLERANCE_MM = 0.01
+MAX_VOXELS = 200_000_000
+MAX_DECODED_BYTES = 2_000_000_000
+AFFINE_AGREEMENT_ATOL_MM = 1e-3
+_XFORM_FRAMES = {
+    0: "unknown-world-ras",
+    1: "scanner-ras",
+    2: "aligned-ras",
+    3: "talairach-ras",
+    4: "mni-ras",
+}
 
 
 def volume_suffix(path: Path) -> str:
@@ -47,7 +59,7 @@ def volume_suffix(path: Path) -> str:
 
 @dataclass(frozen=True, slots=True)
 class MriVolumeInfo:
-    """Header facts for one volume. `affine` maps voxel (i, j, k) to scanner RAS in mm."""
+    """Header facts for one volume. `affine` maps voxel indices to the declared world RAS frame in mm."""
 
     file_name: str
     format: VolumeFormat
@@ -59,6 +71,8 @@ class MriVolumeInfo:
     sform_code: int | None
     dtype: str
     spatial_unit: str
+    affine_source: AffineSource
+    world_frame: str
 
     @property
     def field_of_view_mm(self) -> tuple[float, float, float]:
@@ -82,7 +96,9 @@ class MriVolumeInfo:
             "sformCode": self.sform_code,
             "dtype": self.dtype,
             "spatialUnit": self.spatial_unit,
-            "voxelToScannerRasMm": [[round(float(v), 6) for v in row] for row in self.affine],
+            "affineSource": self.affine_source,
+            "worldFrame": self.world_frame,
+            "voxelToWorldRasMm": [[round(float(v), 6) for v in row] for row in self.affine],
         }
 
 
@@ -103,7 +119,7 @@ class MriCheck:
         return not any(f.level == "error" for f in self.findings)
 
 
-def load_volume_info(path: Path) -> MriVolumeInfo:
+def load_volume_info(path: Path, *, assume_mm: bool = False) -> MriVolumeInfo:
     """Read and validate a volume header. Raises AnatomyError."""
     suffix = volume_suffix(path)
     if suffix in _REJECTED_SUFFIXES:
@@ -135,7 +151,16 @@ def load_volume_info(path: Path) -> MriVolumeInfo:
         raise AnatomyError("not-3d", f"{path.name}: expected one 3D volume, got shape {shape}")
     if min(shape) < 2:
         raise AnatomyError("invalid-volume", f"{path.name}: degenerate shape {shape}")
+    voxel_count = math.prod(shape)
+    decoded_bytes = voxel_count * max(8, int(image.header.get_data_dtype().itemsize))
+    if voxel_count > MAX_VOXELS or decoded_bytes > MAX_DECODED_BYTES:
+        raise AnatomyError(
+            "volume-too-large",
+            f"{path.name}: {voxel_count} voxels / up to {decoded_bytes} decoded bytes exceeds the safety limit",
+        )
 
+    affine_source: AffineSource = "mgh"
+    world_frame = "scanner-ras"
     affine = np.asarray(image.affine, dtype=np.float64)
     if affine.shape != (4, 4) or not np.all(np.isfinite(affine)):
         raise AnatomyError("invalid-affine", f"{path.name}: affine is not a finite 4x4 matrix")
@@ -152,6 +177,36 @@ def load_volume_info(path: Path) -> MriVolumeInfo:
         header = image.header
         qform_code = int(header["qform_code"])
         sform_code = int(header["sform_code"])
+        qform = np.asarray(image.get_qform(), dtype=np.float64) if qform_code > 0 else None
+        sform = np.asarray(image.get_sform(), dtype=np.float64) if sform_code > 0 else None
+        if qform is not None and sform is not None:
+            corners = np.array(
+                [
+                    [i, j, k, 1.0]
+                    for i in (0, shape[0] - 1)
+                    for j in (0, shape[1] - 1)
+                    for k in (0, shape[2] - 1)
+                ],
+                dtype=np.float64,
+            )
+            q_world = corners @ qform.T
+            s_world = corners @ sform.T
+            difference = float(np.linalg.norm(q_world[:, :3] - s_world[:, :3], axis=1).max())
+            if difference > AFFINE_AGREEMENT_ATOL_MM:
+                raise AnatomyError(
+                    "inconsistent-affines",
+                    f"{path.name}: qform and sform disagree by up to {difference:.3f} mm across the volume",
+                )
+        if sform is not None:
+            affine = sform
+            affine_source = "sform"
+            world_frame = _XFORM_FRAMES.get(sform_code, "unknown-world-ras")
+        elif qform is not None:
+            affine = qform
+            affine_source = "qform"
+            world_frame = _XFORM_FRAMES.get(qform_code, "unknown-world-ras")
+        else:
+            raise AnatomyError("no-affine", f"{path.name}: qform_code and sform_code are both 0")
         spatial_unit = str(header.get_xyzt_units()[0])
         if spatial_unit not in _NIFTI_SPATIAL_UNITS:
             spatial_unit = "unknown"
@@ -159,6 +214,13 @@ def load_volume_info(path: Path) -> MriVolumeInfo:
             raise AnatomyError(
                 "unsupported-units", f"{path.name}: spatial units are '{spatial_unit}'; anatomy requires millimetres"
             )
+        if spatial_unit == "unknown":
+            if not assume_mm:
+                raise AnatomyError(
+                    "unknown-units",
+                    f"{path.name}: spatial units are unset; use an explicit millimetre assumption only when source documentation supports it",
+                )
+            spatial_unit = "mm-assumed"
 
     return MriVolumeInfo(
         file_name=path.name,
@@ -171,6 +233,8 @@ def load_volume_info(path: Path) -> MriVolumeInfo:
         sform_code=sform_code,
         dtype=str(image.get_data_dtype()),
         spatial_unit=spatial_unit,
+        affine_source=affine_source,
+        world_frame=world_frame,
     )
 
 
@@ -185,9 +249,9 @@ def read_voxels_checked(path: Path) -> NDArray[np.floating]:
     return data
 
 
-def check_mri(path: Path, *, read_data: bool = True) -> MriCheck:
+def check_mri(path: Path, *, read_data: bool = True, assume_mm: bool = False) -> MriCheck:
     """Validate a T1-weighted volume as FreeSurfer input. Does not resample or modify it."""
-    info = load_volume_info(path)
+    info = load_volume_info(path, assume_mm=assume_mm)
     findings: list[Finding] = []
     if read_data:
         data = read_voxels_checked(path)
@@ -218,12 +282,8 @@ def check_mri(path: Path, *, read_data: bool = True) -> MriCheck:
         )
     if info.is_oblique:
         findings.append(Finding("info", "oblique", "voxel axes are oblique to scanner axes; recon-all handles this"))
-    if info.format.startswith("nifti") and info.qform_code == 0 and info.sform_code == 0:
-        findings.append(
-            Finding("warning", "no-orientation", "qform_code and sform_code are both 0; orientation may be unreliable")
-        )
-    if info.spatial_unit == "unknown":
-        findings.append(Finding("info", "unknown-units", "spatial units not set in the header; millimetres assumed"))
+    if info.spatial_unit == "mm-assumed":
+        findings.append(Finding("warning", "assumed-mm", "spatial units were unset; millimetres were explicitly assumed"))
     findings.append(Finding("info", "orientation", f"voxel axes point to {info.orientation} (nibabel axis codes)"))
     return MriCheck(info=info, findings=tuple(findings))
 

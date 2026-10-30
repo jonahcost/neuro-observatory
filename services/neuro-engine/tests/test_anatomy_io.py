@@ -108,6 +108,46 @@ def test_singular_affine_is_rejected(tmp_path: Path) -> None:
     assert info.value.code == "invalid-affine"
 
 
+def test_unknown_nifti_units_require_an_explicit_recorded_assumption(tmp_path: Path) -> None:
+    path = write_t1(tmp_path / "unknown-units.nii.gz")
+    image = nib.load(path)
+    image.header.set_xyzt_units(None)
+    nib.save(image, path)
+    with pytest.raises(AnatomyError) as info:
+        load_volume_info(path)
+    assert info.value.code == "unknown-units"
+    assert load_volume_info(path, assume_mm=True).spatial_unit == "mm-assumed"
+
+
+def test_qform_sform_disagreement_uses_absolute_world_displacement(tmp_path: Path) -> None:
+    path = write_t1(tmp_path / "conflict.nii.gz", shape=(8, 8, 8))
+    image = nib.load(path)
+    qform = np.eye(4)
+    qform[:3, 3] = 1_000_000
+    sform = qform.copy()
+    sform[0, 3] += 5
+    image.set_qform(qform, code=1)
+    image.set_sform(sform, code=1)
+    nib.save(image, path)
+    with pytest.raises(AnatomyError) as info:
+        load_volume_info(path)
+    assert info.value.code == "inconsistent-affines"
+
+
+@pytest.mark.parametrize(
+    ("code", "frame"),
+    [(1, "scanner-ras"), (2, "aligned-ras"), (3, "talairach-ras"), (4, "mni-ras")],
+)
+def test_nifti_xform_code_names_the_world_frame(tmp_path: Path, code: int, frame: str) -> None:
+    path = write_t1(tmp_path / f"frame-{code}.nii.gz")
+    image = nib.load(path)
+    image.set_qform(image.affine, code=code)
+    image.set_sform(image.affine, code=code)
+    nib.save(image, path)
+    info = load_volume_info(path)
+    assert info.affine_source == "sform" and info.world_frame == frame
+
+
 def test_same_voxel_grid_compares_shape_and_affine(tmp_path: Path) -> None:
     a = load_volume_info(write_t1(tmp_path / "a.nii.gz"))
     b = load_volume_info(write_t1(tmp_path / "b.nii.gz"))
@@ -156,6 +196,32 @@ def test_degenerate_triangle_is_rejected(tmp_path: Path) -> None:
     with pytest.raises(AnatomyError) as info:
         read_surface(tmp_path / "lh.pial", "lh", "pial")
     assert info.value.code == "invalid-surface"
+
+
+def test_reversed_face_is_rejected_even_when_aggregate_volume_is_positive(tmp_path: Path) -> None:
+    vertices, faces = surface_vertices("lh", "pial")
+    faces = faces.copy()
+    faces[0] = faces[0][::-1]
+    write_surface(tmp_path / "lh.pial", vertices, faces)
+    with pytest.raises(AnatomyError) as info:
+        read_surface(tmp_path / "lh.pial", "lh", "pial")
+    assert info.value.code == "invalid-surface"
+
+
+def test_open_and_zero_area_surfaces_are_rejected(tmp_path: Path) -> None:
+    vertices, faces = surface_vertices("lh", "pial")
+    write_surface(tmp_path / "open.pial", vertices, faces[:-1])
+    with pytest.raises(AnatomyError) as opened:
+        read_surface(tmp_path / "open.pial", "lh", "pial")
+    assert opened.value.code == "invalid-surface"
+
+    collinear_vertices = vertices.copy()
+    a, _, c = faces[0]
+    collinear_vertices[c] = collinear_vertices[a]
+    write_surface(tmp_path / "flat.pial", collinear_vertices, faces)
+    with pytest.raises(AnatomyError) as flat:
+        read_surface(tmp_path / "flat.pial", "lh", "pial")
+    assert flat.value.code == "invalid-surface"
 
 
 def test_parcellation_labels_colours_and_unlabelled_vertices(tmp_path: Path) -> None:

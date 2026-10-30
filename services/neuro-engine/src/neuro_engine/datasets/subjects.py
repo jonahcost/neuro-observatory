@@ -10,7 +10,7 @@ from __future__ import annotations
 import csv
 import json
 import re
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 
 import numpy as np
@@ -85,7 +85,7 @@ def _fsaverage(root: DataRoot) -> list[SubjectSource]:
     spec = get_dataset("fsaverage")
     base = root.raw(spec.id, spec.version)
     fs = base / "fsaverage"
-    if not fs.is_dir():
+    if not fs.is_dir() or read_record(root, spec.id, spec.version) is None:
         return []
     return [
         SubjectSource(
@@ -105,7 +105,7 @@ def _fsaverage(root: DataRoot) -> list[SubjectSource]:
 def _ds000248(root: DataRoot) -> list[SubjectSource]:
     spec = get_dataset("ds000248")
     base = root.raw(spec.id, spec.version)
-    if not base.is_dir():
+    if not base.is_dir() or read_record(root, spec.id, spec.version) is None:
         return []
     subjects = []
     for sub_dir in sorted(p for p in base.iterdir() if p.is_dir() and _BIDS_SUBJECT.match(p.name)):
@@ -134,6 +134,10 @@ def _ixi(root: DataRoot) -> list[SubjectSource]:
     if not base.is_dir():
         return []
     derivatives = root.derivatives(spec.id, spec.version) / "freesurfer"
+    record = read_record(root, spec.id, spec.version)
+    if record is None:
+        return []
+    declared = record.declared_acquisition if record else {}
     subjects = []
     for t1 in sorted(base.glob("IXI*-T1.nii.gz")):
         try:
@@ -141,6 +145,12 @@ def _ixi(root: DataRoot) -> list[SubjectSource]:
         except DatasetError:
             continue
         fs = derivatives / ixi.subject_id
+        acquisition = replace(
+            SITE_FACTS[ixi.site],
+            spatial_units_assumed_mm=declared.get(ixi.subject_id, None).spatial_units_assumed_mm
+            if ixi.subject_id in declared
+            else False,
+        )
         subjects.append(
             SubjectSource(
                 key=f"ixi/{ixi.subject_id}",
@@ -151,7 +161,7 @@ def _ixi(root: DataRoot) -> list[SubjectSource]:
                 dataset_dir=base,
                 t1=t1,
                 freesurfer_dir=fs if fs.is_dir() else None,
-                acquisition=SITE_FACTS[ixi.site],
+                acquisition=acquisition,
             )
         )
     return subjects
@@ -163,6 +173,8 @@ def _local(root: DataRoot) -> list[SubjectSource]:
     if not base.is_dir():
         return []
     record = read_record(root, spec.id, spec.version)
+    if record is None:
+        return []
     declared = record.declared_acquisition if record else {}
     labels = {p.name for sub in ("mri", "freesurfer") if (base / sub).is_dir() for p in (base / sub).iterdir() if p.is_dir()}
     subjects = []
@@ -175,6 +187,7 @@ def _local(root: DataRoot) -> list[SubjectSource]:
             facts.sequence if facts else None,
             facts.scanner if facts else None,
             "user-declared",
+            spatial_units_assumed_mm=facts.spatial_units_assumed_mm if facts else False,
         )
         subjects.append(
             SubjectSource(
@@ -215,7 +228,11 @@ def check_subject(subject: SubjectSource) -> list[Finding]:
     t1_info = None
     if subject.t1 is not None:
         try:
-            check = check_mri(subject.t1, read_data=True)
+            check = check_mri(
+                subject.t1,
+                read_data=True,
+                assume_mm=subject.acquisition.spatial_units_assumed_mm,
+            )
             t1_info = check.info
             findings.extend(check.findings)
         except AnatomyError as exc:

@@ -52,3 +52,12 @@ def test_python_validator_classifies_like_typescript(case: dict) -> None:
 def test_valid_fixtures_round_trip(case: dict) -> None:
     document = anatomy_v1.parse_document(_text(case))
     assert anatomy_v1.to_wire_dict(document) == json.loads(_text(case))
+
+
+def test_wire_serialization_revalidates_mutated_nested_models() -> None:
+    text = (ANATOMY_FIXTURE_ROOT / "valid/asset-tetrahedra.json").read_text()
+    document = anatomy_v1.parse_document(text)
+    assert isinstance(document, anatomy_v1.AnatomyAsset)
+    object.__setattr__(document.provenance.sources[0], "path", "../escaped")
+    with pytest.raises(ProtocolError):
+        anatomy_v1.to_wire_dict(document)

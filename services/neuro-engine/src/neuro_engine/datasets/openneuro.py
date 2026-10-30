@@ -23,6 +23,7 @@ from neuro_engine.datasets.download import (
     DownloadTarget,
     Opener,
     Progress,
+    allowed_opener,
     check_url_allowed,
     fetch,
 )
@@ -38,6 +39,10 @@ from neuro_engine.datasets.provenance import (
 from neuro_engine.datasets.storage import DataRoot
 
 GRAPHQL_URL = "https://openneuro.org/crn/graphql"
+MAX_GRAPHQL_RESPONSE_BYTES = 10_000_000
+MAX_SNAPSHOT_FILES = 10_000
+MAX_TREE_DEPTH = 32
+MAX_REMOTE_FILE_BYTES = 20_000_000_000
 Profile = Literal["anatomy", "full"]
 
 _SUB01_FS = "derivatives/freesurfer/subjects/sub-01"
@@ -86,8 +91,14 @@ def default_post_json(url: str, body: dict[str, Any]) -> dict[str, Any]:
         headers={"Content-Type": "application/json", "User-Agent": USER_AGENT},
     )
     try:
-        with urllib.request.urlopen(request, timeout=60) as response:
-            return json.loads(response.read())
+        response = allowed_opener(("openneuro.org/crn/graphql",))(request, 60)
+        try:
+            payload = response.read(MAX_GRAPHQL_RESPONSE_BYTES + 1)
+        finally:
+            response.close()
+        if len(payload) > MAX_GRAPHQL_RESPONSE_BYTES:
+            raise DatasetError("openneuro-api", "OpenNeuro API response exceeds the safety limit", "retry later")
+        return json.loads(payload)
     except urllib.error.HTTPError as exc:
         raise DatasetError("http-error", f"OpenNeuro API returned HTTP {exc.code}", "retry later") from None
     except (urllib.error.URLError, TimeoutError, OSError, ValueError) as exc:
@@ -110,6 +121,7 @@ def _safe_relative(path: str) -> str:
 def list_snapshot(dataset_id: str, tag: str, *, post_json: PostJson = default_post_json) -> list[RemoteFile]:
     """Every file in the snapshot (recursing into directories), excluding DataLad metadata."""
     files: list[RemoteFile] = []
+    visited_trees: set[str] = set()
 
     def query(tree: str | None) -> list[dict[str, Any]]:
         args = f'(tree: "{tree}")' if tree else ""
@@ -125,18 +137,29 @@ def list_snapshot(dataset_id: str, tag: str, *, post_json: PostJson = default_po
             )
         return data["data"]["snapshot"]["files"]
 
-    def walk(prefix: str, tree: str | None) -> None:
+    def walk(prefix: str, tree: str | None, depth: int = 0) -> None:
+        if depth > MAX_TREE_DEPTH:
+            raise DatasetError("openneuro-api", "OpenNeuro snapshot tree exceeds the depth limit", "use local import")
+        if tree is not None:
+            if tree in visited_trees:
+                raise DatasetError("openneuro-api", "OpenNeuro snapshot tree contains a cycle", "report this upstream")
+            visited_trees.add(tree)
         for entry in query(tree):
             name = str(entry["filename"])
             path = _safe_relative(f"{prefix}{name}")
             if entry.get("directory"):
                 if name != ".datalad":
-                    walk(f"{path}/", str(entry["id"]))
+                    walk(f"{path}/", str(entry["id"]), depth + 1)
                 continue
+            if len(files) >= MAX_SNAPSHOT_FILES:
+                raise DatasetError("openneuro-api", "OpenNeuro snapshot exceeds the file-count safety limit", "use a smaller profile")
+            size = int(entry["size"])
+            if not 0 <= size <= MAX_REMOTE_FILE_BYTES:
+                raise DatasetError("openneuro-api", f"OpenNeuro listed an invalid size for {path}", "report this upstream")
             urls = entry.get("urls") or []
             if not urls:
                 raise DatasetError("openneuro-api", f"no download URL for {path}", "retry later")
-            files.append(RemoteFile(path=path, size=int(entry["size"]), file_id=str(entry["id"]), url=str(urls[0])))
+            files.append(RemoteFile(path=path, size=size, file_id=str(entry["id"]), url=str(urls[0])))
 
     walk("", None)
     return files
@@ -188,6 +211,12 @@ def fetch_openneuro(
     try:
         for remote in selected:
             checksum = checksum_from_openneuro_id(remote.file_id, remote.size)
+            if checksum is None:
+                raise DatasetError(
+                    "unsupported-checksum",
+                    f"OpenNeuro listed an unsupported checksum ID for {remote.path}",
+                    "the snapshot format may have changed; use the DOI for a manual verified acquisition",
+                )
             destination = raw / remote.path
             changed = fetch(
                 DownloadTarget(

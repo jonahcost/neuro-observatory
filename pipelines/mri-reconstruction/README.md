@@ -46,7 +46,8 @@ Never run reconstructions inside the repository, and never commit their outputs.
 1. The run finished without errors (`scripts/recon-all.log` ends with "finished without error", or the FastSurfer log reports success).
 2. Visual QC of the pial and white surfaces over the T1 (e.g. `freeview`), checking for skull-strip and topology errors.
 3. `uv run neuro-engine datasets check-subject ixi/IXI012-HH-1211`: the surfaces are found, and `rawavg.mgz` matches the imported T1 voxel grid.
-4. `uv run neuro-engine anatomy prepare ixi/IXI012-HH-1211`: geometry, `c_ras` and `orig.mgz` consistency are checked during preparation; then `anatomy verify <assetId>`.
+4. Register the reconstruction provenance (`datasets register-reconstruction`) with the input/output hashes, tool/version, privacy-safe command summary and `--qc-status passed`.
+5. `uv run neuro-engine anatomy prepare ixi/IXI012-HH-1211`: geometry, `c_ras`, source hashes, QC status and `orig.mgz` consistency are checked during preparation; then `anatomy verify <assetId>`.
 
 Record the software, version, command, runtime and QC result in the work record of the chunk that runs it.
 
@@ -57,10 +58,12 @@ Use a pseudonymous label and keep everything in the data root:
 ```bash
 uv run neuro-engine datasets import-mri <T1.nii.gz> --label me --field-strength 3 --sequence MPRAGE --scanner "<model>"
 # reconstruct as above, with any SUBJECTS_DIR outside the repository
-uv run neuro-engine datasets import-freesurfer "$SUBJECTS_DIR/<subject>" --label me
+uv run neuro-engine datasets import-freesurfer "$SUBJECTS_DIR/<subject>" --label me \
+  --tool FreeSurfer --tool-version "<version>" \
+  --command-summary "recon-all -all (privacy-safe options)" --qc-status passed
 uv run neuro-engine anatomy prepare local/me
 ```
 
-`import-freesurfer` copies the surfaces, annotations, `orig.mgz`/`T1.mgz`/`rawavg.mgz` and the build stamp into `raw/local/1/freesurfer/me/`; it never overwrites and does not record the source path. MRI-derived meshes of a person are restricted data: they are served only on loopback and must not be committed, uploaded or shared.
+`import-freesurfer` requires the matching MRI to be imported first. It copies the surfaces, annotations, `orig.mgz`/`T1.mgz`/`rawavg.mgz` and the build stamp into `raw/local/1/freesurfer/me/`; it never overwrites or records the source path. It writes a versioned reconstruction record and preparation remains blocked unless acquisition hashes still match and QC is `passed`. MRI-derived meshes of a person are restricted data: they are served only on loopback and must not be committed, uploaded or shared.
 
 DICOM input must first be converted to NIfTI (e.g. with `dcm2niix`); a DICOM path is not implemented here.

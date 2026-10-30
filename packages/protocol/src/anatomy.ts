@@ -42,6 +42,32 @@ function allFinite(values: readonly number[]): boolean {
   return values.every((v) => Number.isFinite(v));
 }
 
+function validUtcSecond(value: string): boolean {
+  const match = /^([0-9]{4})-([0-9]{2})-([0-9]{2})T([0-9]{2}):([0-9]{2}):([0-9]{2})Z$/.exec(value);
+  if (!match) {
+    return false;
+  }
+  const [, year, month, day, hour, minute, second] = match;
+  if (year === '0000') {
+    return false;
+  }
+  const date = new Date(0);
+  date.setUTCFullYear(Number(year), Number(month) - 1, Number(day));
+  date.setUTCHours(Number(hour), Number(minute), Number(second), 0);
+  return !Number.isNaN(date.valueOf()) && date.toISOString() === `${value.slice(0, -1)}.000Z`;
+}
+
+function safeRelativePath(value: string): boolean {
+  return !value.split('/').some((part) => part === '' || part === '.' || part === '..');
+}
+
+function linearDeterminant(matrix: readonly number[]): number {
+  const [a, b, c, , d, e, f, , g, h, i] = matrix;
+  return (a as number) * ((e as number) * (i as number) - (f as number) * (h as number))
+    - (b as number) * ((d as number) * (i as number) - (f as number) * (g as number))
+    + (c as number) * ((d as number) * (h as number) - (e as number) * (g as number));
+}
+
 function surfaceIssue(surface: SurfaceMesh, path: string): string | null {
   if (surface.positions.dtype !== 'float32') {
     return `${path}/positions/dtype must be float32`;
@@ -90,6 +116,22 @@ function parcellationIssue(parcellation: Parcellation, path: string, vertexCount
 }
 
 function assetIssue(asset: AnatomyAsset): string | null {
+  const facts = [asset.acquisition.fieldStrengthTesla, asset.acquisition.sequence, asset.acquisition.scanner];
+  if (asset.anatomyKind === 'template') {
+    if (asset.acquisition.source !== 'not-applicable' || facts.some((value) => value !== null)) {
+      return '/acquisition templates require null facts with source not-applicable';
+    }
+  } else if (asset.acquisition.source === 'not-applicable') {
+    return '/acquisition source not-applicable is only valid for templates';
+  }
+  if (!validUtcSecond(asset.provenance.preparedAtUtc)) {
+    return '/provenance/preparedAtUtc must be a real UTC calendar second';
+  }
+  for (const [position, source] of asset.provenance.sources.entries()) {
+    if (!safeRelativePath(source.path)) {
+      return `/provenance/sources/${position}/path must be relative without empty, '.' or '..' segments`;
+    }
+  }
   const files = new Set<string>();
   const claim = (file: string, path: string): string | null => {
     if (files.has(file)) {
@@ -134,6 +176,7 @@ function assetIssue(asset: AnatomyAsset): string | null {
       return issue;
     }
   }
+  const transformTargets = new Set<string>();
   for (const [position, transform] of asset.transforms.entries()) {
     const path = `/transforms/${position}`;
     if (transform.from !== asset.coordinateFrame) {
@@ -144,6 +187,13 @@ function assetIssue(asset: AnatomyAsset): string | null {
     }
     if (!allFinite(transform.matrix)) {
       return `${path}/matrix must be finite`;
+    }
+    if (transformTargets.has(transform.to)) {
+      return `${path}/to duplicates an earlier transform target`;
+    }
+    transformTargets.add(transform.to);
+    if (Math.abs(linearDeterminant(transform.matrix)) < 1e-12) {
+      return `${path}/matrix linear component must be invertible`;
     }
     const [a, b, c, d] = transform.matrix.slice(12);
     if (a !== 0 || b !== 0 || c !== 0 || d !== 1) {
@@ -241,6 +291,8 @@ export function surfaceGeometryIssue(
     return `indices has ${indices.length} values, expected ${surface.triangleCount * 3}`;
   }
   const { min, max } = surface.boundsMm;
+  const actualMin = [Infinity, Infinity, Infinity];
+  const actualMax = [-Infinity, -Infinity, -Infinity];
   for (let i = 0; i < positions.length; i += 1) {
     const value = positions[i] as number;
     const axis = i % 3;
@@ -249,6 +301,16 @@ export function surfaceGeometryIssue(
     }
     if (value < (min[axis] as number) - BOUNDS_TOLERANCE_MM || value > (max[axis] as number) + BOUNDS_TOLERANCE_MM) {
       return `position ${Math.floor(i / 3)} lies outside the declared bounds`;
+    }
+    actualMin[axis] = Math.min(actualMin[axis] as number, value);
+    actualMax[axis] = Math.max(actualMax[axis] as number, value);
+  }
+  for (let axis = 0; axis < 3; axis += 1) {
+    if (
+      Math.abs((actualMin[axis] as number) - (min[axis] as number)) > BOUNDS_TOLERANCE_MM ||
+      Math.abs((actualMax[axis] as number) - (max[axis] as number)) > BOUNDS_TOLERANCE_MM
+    ) {
+      return `declared bounds do not match position extrema on axis ${axis}`;
     }
   }
   for (let i = 0; i < indices.length; i += 1) {

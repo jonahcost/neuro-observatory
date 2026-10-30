@@ -12,13 +12,95 @@ from __future__ import annotations
 import os
 import subprocess
 import sys
-from collections.abc import Mapping
+import time
+from collections.abc import Iterator, Mapping
+from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
 
 from neuro_engine.datasets.errors import DatasetError
 
 ENV_DATA_DIR = "NEURO_ENGINE_DATA_DIR"
+LOCK_TIMEOUT_S = 30.0
+
+
+def _safe_component(value: str, label: str) -> str:
+    if not value or value in (".", "..") or any(separator in value for separator in ("/", "\\")):
+        raise DatasetError("unsafe-path", f"{label} is not a safe path component")
+    return value
+
+
+def ensure_contained(root: Path, path: Path) -> Path:
+    """Resolve `path` and require it to remain under `root`."""
+    resolved_root = root.resolve()
+    resolved = path.resolve()
+    if not resolved.is_relative_to(resolved_root):
+        raise DatasetError("unsafe-path", "resolved path escapes the configured data root")
+    return resolved
+
+
+def private_mkdir(path: Path) -> None:
+    for candidate in (path, *path.parents):
+        if candidate.is_symlink():
+            raise DatasetError("unsafe-path", f"refusing symlinked directory component {candidate.name}")
+    path.mkdir(parents=True, exist_ok=True, mode=0o700)
+    if path.is_symlink() or not path.is_dir():
+        raise DatasetError("unsafe-path", f"{path.name} is not a private directory")
+    if os.name == "posix":
+        path.chmod(0o700)
+
+
+@contextmanager
+def file_lock(path: Path, *, timeout_s: float = LOCK_TIMEOUT_S) -> Iterator[None]:
+    """OS-owned interprocess lock; process exit releases it without stale-lock theft."""
+    lock = path.with_name(path.name + ".lock")
+    private_mkdir(lock.parent)
+    flags = os.O_RDWR | os.O_CREAT | getattr(os, "O_NOFOLLOW", 0)
+    try:
+        descriptor = os.open(lock, flags, 0o600)
+    except OSError as exc:
+        raise DatasetError("unsafe-path", f"cannot safely open lock for {path.name}") from exc
+    deadline = time.monotonic() + timeout_s
+    try:
+        if os.name == "posix":
+            import fcntl
+
+            while True:
+                try:
+                    fcntl.flock(descriptor, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                    break
+                except BlockingIOError:
+                    if time.monotonic() >= deadline:
+                        raise DatasetError(
+                            "resource-busy",
+                            f"timed out waiting for {path.name}",
+                            "retry after the other operation finishes",
+                        ) from None
+                    time.sleep(0.05)
+        else:
+            import msvcrt
+
+            while True:
+                try:
+                    os.lseek(descriptor, 0, os.SEEK_SET)
+                    msvcrt.locking(descriptor, msvcrt.LK_NBLCK, 1)
+                    break
+                except OSError:
+                    if time.monotonic() >= deadline:
+                        raise DatasetError(
+                            "resource-busy",
+                            f"timed out waiting for {path.name}",
+                            "retry after the other operation finishes",
+                        ) from None
+                    time.sleep(0.05)
+        if os.name == "posix":
+            try:
+                os.fchmod(descriptor, 0o600)
+            except OSError:
+                pass
+        yield
+    finally:
+        os.close(descriptor)
 
 
 def default_data_dir(env: Mapping[str, str] | None = None, platform: str | None = None, home: Path | None = None) -> Path:
@@ -73,16 +155,22 @@ class DataRoot:
     path: Path
 
     def raw(self, dataset_id: str, version: str) -> Path:
-        return self.path / "raw" / dataset_id / version
+        return self.path / "raw" / _safe_component(dataset_id, "dataset ID") / _safe_component(version, "dataset version")
 
     def acquisition_record(self, dataset_id: str, version: str) -> Path:
-        return self.path / "raw" / dataset_id / f"{version}.acquisition.json"
+        dataset = _safe_component(dataset_id, "dataset ID")
+        safe_version = _safe_component(version, "dataset version")
+        return self.path / "raw" / dataset / f"{safe_version}.acquisition.json"
 
     def downloads(self, dataset_id: str, version: str) -> Path:
-        return self.path / "downloads" / dataset_id / version
+        return self.path / "downloads" / _safe_component(dataset_id, "dataset ID") / _safe_component(version, "dataset version")
 
     def derivatives(self, dataset_id: str, version: str) -> Path:
-        return self.path / "derivatives" / dataset_id / version
+        return self.path / "derivatives" / _safe_component(dataset_id, "dataset ID") / _safe_component(version, "dataset version")
+
+    def reconstruction_record(self, dataset_id: str, version: str, subject_id: str) -> Path:
+        subject = _safe_component(subject_id, "subject ID")
+        return self.derivatives(dataset_id, version) / "provenance" / f"{subject}.reconstruction.json"
 
     @property
     def anatomy_assets(self) -> Path:
@@ -90,7 +178,7 @@ class DataRoot:
 
     def prepare_for_writing(self) -> None:
         ensure_outside_version_control(self.path)
-        self.path.mkdir(parents=True, exist_ok=True)
+        private_mkdir(self.path)
 
 
 def resolve_data_root(configured: Path | str | None = None, env: Mapping[str, str] | None = None) -> DataRoot:

@@ -4,19 +4,33 @@ from __future__ import annotations
 
 import json
 import os
+import tempfile
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Annotated, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    StringConstraints,
+    ValidationError,
+    field_validator,
+)
 from pydantic.alias_generators import to_camel
 
 from neuro_engine.datasets.catalog import DatasetSpec
 from neuro_engine.datasets.errors import DatasetError
 from neuro_engine.datasets.integrity import sha256_file
-from neuro_engine.datasets.storage import DataRoot
+from neuro_engine.datasets.storage import (
+    DataRoot,
+    ensure_contained,
+    file_lock,
+    private_mkdir,
+)
 
 RECORD_VERSION: Literal[1] = 1
+DatasetKey = Annotated[str, StringConstraints(pattern=r"^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$")]
 
 
 def utc_now() -> str:
@@ -57,12 +71,13 @@ class DeclaredAcquisition(_Record):
     field_strength_tesla: float | None = None
     sequence: str | None = None
     scanner: str | None = None
+    spatial_units_assumed_mm: bool = False
 
 
 class AcquisitionRecord(_Record):
     record_version: Literal[1] = RECORD_VERSION
-    dataset_id: str
-    dataset_version: str
+    dataset_id: DatasetKey
+    dataset_version: DatasetKey
     title: str
     doi: str | None
     homepage: str
@@ -114,13 +129,20 @@ def read_record(root: DataRoot, dataset_id: str, version: str) -> AcquisitionRec
     if not path.is_file():
         return None
     try:
-        return AcquisitionRecord.model_validate_json(path.read_text(encoding="utf-8"))
+        record = AcquisitionRecord.model_validate_json(path.read_text(encoding="utf-8"))
     except (OSError, ValidationError, ValueError):
         raise DatasetError(
             "corrupt-provenance",
             f"provenance record for {dataset_id} {version} is unreadable",
             f"re-run 'neuro-engine datasets fetch {dataset_id}' to rebuild it",
         ) from None
+    if record.dataset_id != dataset_id or record.dataset_version != version:
+        raise DatasetError(
+            "corrupt-provenance",
+            f"provenance record for {dataset_id} {version} describes {record.dataset_id} {record.dataset_version}",
+            "move the mismatched record aside and reacquire the dataset",
+        )
+    return record
 
 
 def verify_record(root: DataRoot, record: AcquisitionRecord) -> list[str]:
@@ -128,7 +150,11 @@ def verify_record(root: DataRoot, record: AcquisitionRecord) -> list[str]:
     base = root.raw(record.dataset_id, record.dataset_version)
     problems: list[str] = []
     for entry in record.files:
-        path = base / entry.path
+        try:
+            path = ensure_contained(base, base / entry.path)
+        except DatasetError:
+            problems.append(f"{entry.path}: escapes the dataset directory")
+            continue
         if not path.is_file():
             problems.append(f"{entry.path}: missing")
         elif path.stat().st_size != entry.bytes:
@@ -139,10 +165,32 @@ def verify_record(root: DataRoot, record: AcquisitionRecord) -> list[str]:
 
 
 def write_record(root: DataRoot, record: AcquisitionRecord) -> Path:
-    record.updated_at_utc = utc_now()
+    root.prepare_for_writing()
     path = root.acquisition_record(record.dataset_id, record.dataset_version)
-    path.parent.mkdir(parents=True, exist_ok=True)
-    tmp = path.with_suffix(".json.tmp")
-    tmp.write_text(json.dumps(record.model_dump(mode="json"), indent=2) + "\n", encoding="utf-8")
-    os.replace(tmp, path)
+    ensure_contained(root.path, path)
+    private_mkdir(path.parent)
+    with file_lock(path):
+        existing = read_record(root, record.dataset_id, record.dataset_version)
+        if existing is not None:
+            existing.upsert_files(record.files)
+            existing.declared_acquisition.update(record.declared_acquisition)
+            existing.notes = list(dict.fromkeys([*existing.notes, *record.notes]))
+            existing.tools = list({(tool.name, tool.version): tool for tool in [*existing.tools, *record.tools]}.values())
+            existing.profile = "full" if "full" in (existing.profile, record.profile) else (record.profile or existing.profile)
+            existing.license_accepted_at_utc = existing.license_accepted_at_utc or record.license_accepted_at_utc
+            record = existing
+        record.updated_at_utc = utc_now()
+        descriptor, tmp_name = tempfile.mkstemp(prefix=f".{path.name}.", suffix=".tmp", dir=path.parent)
+        tmp = Path(tmp_name)
+        try:
+            os.chmod(descriptor, 0o600)
+            with os.fdopen(descriptor, "w", encoding="utf-8") as stream:
+                stream.write(json.dumps(record.model_dump(mode="json"), indent=2) + "\n")
+                stream.flush()
+                os.fsync(stream.fileno())
+            os.replace(tmp, path)
+            if os.name == "posix":
+                path.chmod(0o600)
+        finally:
+            tmp.unlink(missing_ok=True)
     return path

@@ -55,6 +55,10 @@ export type Sha256 = string;
  * @maxItems 3
  */
 export type Vec3 = number[];
+/**
+ * Non-negative label index representable by the int32 vertex-label buffer.
+ */
+export type Int32LabelIndex = number;
 export type LongText = string;
 
 /**
@@ -157,7 +161,7 @@ export interface Parcellation {
   vertexLabels: BufferRef;
 }
 export interface ParcellationLabel {
-  index: Count;
+  index: Int32LabelIndex;
   name: AnatomyText;
   /**
    * @minItems 4

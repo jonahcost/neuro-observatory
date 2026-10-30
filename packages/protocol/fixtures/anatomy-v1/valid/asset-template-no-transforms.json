@@ -115,7 +115,7 @@
   "provenance": {
     "pipeline": "neuro-engine.anatomy.prepare",
     "pipelineVersion": "1",
-    "preparedAtUtc": "2026-10-30T12:00:00Z",
+    "preparedAtUtc": "0001-01-01T00:00:00Z",
     "tools": [
       {
         "name": "nibabel",

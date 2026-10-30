@@ -91,14 +91,48 @@ def read_surface(path: Path, hemisphere: Hemisphere, kind: SurfaceKind) -> Corti
         raise AnatomyError("invalid-surface", f"{path.name}: triangle references a vertex out of range")
     if np.any((faces[:, 0] == faces[:, 1]) | (faces[:, 1] == faces[:, 2]) | (faces[:, 0] == faces[:, 2])):
         raise AnatomyError("invalid-surface", f"{path.name}: degenerate triangle (repeated vertex)")
+    triangles = vertices[faces]
+    doubled_areas = np.linalg.norm(
+        np.cross(triangles[:, 1] - triangles[:, 0], triangles[:, 2] - triangles[:, 0]),
+        axis=1,
+    )
+    if np.any(doubled_areas <= 1e-12):
+        raise AnatomyError("invalid-surface", f"{path.name}: zero-area triangle")
+    edges = np.concatenate((faces[:, [0, 1]], faces[:, [1, 2]], faces[:, [2, 0]]))
+    undirected = np.sort(edges, axis=1)
+    unique_edges, inverse, edge_counts = np.unique(undirected, axis=0, return_inverse=True, return_counts=True)
+    if np.any(edge_counts != 2):
+        raise AnatomyError("invalid-surface", f"{path.name}: surface is not a closed two-manifold")
+    directions = np.where(edges[:, 0] < edges[:, 1], 1, -1)
+    if np.any(np.bincount(inverse, weights=directions) != 0):
+        raise AnatomyError("invalid-surface", f"{path.name}: adjacent triangles have inconsistent winding")
+    if np.any(np.bincount(faces.ravel(), minlength=vertices.shape[0]) == 0):
+        raise AnatomyError("invalid-surface", f"{path.name}: surface contains unused vertices")
+    parent = np.arange(vertices.shape[0])
+
+    def find(vertex: int) -> int:
+        while parent[vertex] != vertex:
+            parent[vertex] = parent[parent[vertex]]
+            vertex = int(parent[vertex])
+        return vertex
+
+    for left, right in unique_edges:
+        a, b = find(int(left)), find(int(right))
+        if a != b:
+            parent[b] = a
+    if len({find(vertex) for vertex in range(vertices.shape[0])}) != 1:
+        raise AnatomyError("invalid-surface", f"{path.name}: surface has disconnected components")
     cras = metadata.get("cras") if metadata else None
-    return CorticalSurface(
+    surface = CorticalSurface(
         hemisphere=hemisphere,
         kind=kind,
         vertices=vertices,
         faces=faces,
         cras=None if cras is None else np.asarray(cras, dtype=np.float64),
     )
+    if signed_volume_mm3(surface) <= 0:
+        raise AnatomyError("invalid-surface", f"{path.name}: triangle winding is not outward")
+    return surface
 
 
 def signed_volume_mm3(surface: CorticalSurface) -> float:

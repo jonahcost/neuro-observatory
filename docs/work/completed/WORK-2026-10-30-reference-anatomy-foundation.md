@@ -115,6 +115,8 @@ Live end-to-end check, with the engine (`uvicorn --reload`, 127.0.0.1:8000) and 
 - Follow-ups: FreeSurfer/FastSurfer reconstruction of the IXI HH T1 and later the personal MRI; head↔MRI registration from ds000248 landmarks and digitization; template and subject forward models; a source-estimate wire contract (new ADR); DICOM→NIfTI via dcm2niix; volume slice viewer.
 - Known gaps after implementation: no reconstruction exists for IXI (documented only); no localization of any kind; the desktop bundle is 1.3 MB minified (three.js), not code-split; the OpenNeuro downloader depends on the GraphQL schema verified on 2026-10-30; ds000248's 1.5 T is from the README, not a sidecar; IXI scanner parameters are site-level; the personal-anatomy path is unit-tested with synthetic data only; `starlette.testclient` emits a deprecation warning about `httpx` (pre-existing).
 
+Post-completion factual correction under accepted ADR-0011: the original criterion's phrase “same inputs give the same `assetId` and bytes” applies to the stable derivation ID and binary geometry/label buffers, not the timestamped manifest bytes. NIfTI world affines are named from their xform codes rather than universally called scanner RAS. External/personal reconstruction preparation now requires versioned input/output hashes and passed QC. The original validation results above remain historical evidence for ADR-0010; remediation evidence is recorded in `WORK-2026-10-30-milestone-02a-review-remediation.md`.
+
 ## Human Review
 
 2026-10-30 (chat): the owner approved the ADR-0010 plan for implementation with the recommended option for every choice:

@@ -7,6 +7,8 @@ import numpy as np
 import pytest
 from anatomy_fixtures import (
     DEFAULT_CRAS,
+    record_dataset_files,
+    record_local_reconstruction,
     surface_vertices,
     write_freesurfer_subject,
     write_surface,
@@ -15,6 +17,8 @@ from anatomy_fixtures import (
 from neuro_engine.anatomy.assets import AssetStore, prepare_asset
 from neuro_engine.anatomy.errors import AnatomyError
 from neuro_engine.datasets.catalog import get_dataset
+from neuro_engine.datasets.errors import DatasetError
+from neuro_engine.datasets.reconstruction import write_reconstruction_record
 from neuro_engine.datasets.storage import DataRoot
 from neuro_engine.datasets.subjects import resolve_subject
 
@@ -39,6 +43,7 @@ def local_fs_dir(root: DataRoot, label: str = "me") -> Path:
 
 def test_prepare_writes_a_contract_valid_asset_preserving_coordinates(root: DataRoot, anatomy_schema_validator) -> None:  # type: ignore[no-untyped-def]
     write_freesurfer_subject(local_fs_dir(root), atlases=("aparc", "aparc.a2009s"))
+    record_local_reconstruction(root)
     subject = resolve_subject(root, "local/me")
     prepared = prepare_asset(root, subject, clock=fixed_clock)
     assert prepared.created
@@ -70,6 +75,7 @@ def test_prepare_writes_a_contract_valid_asset_preserving_coordinates(root: Data
 
 def test_prepare_is_idempotent_and_content_addressed(root: DataRoot) -> None:
     write_freesurfer_subject(local_fs_dir(root))
+    record_local_reconstruction(root)
     subject = resolve_subject(root, "local/me")
     first = prepare_asset(root, subject, clock=fixed_clock)
     second = prepare_asset(root, subject, clock=lambda: "2030-01-01T00:00:00Z")
@@ -81,15 +87,19 @@ def test_prepare_is_idempotent_and_content_addressed(root: DataRoot) -> None:
 
 def test_changed_source_gives_a_new_asset_id(root: DataRoot) -> None:
     fs = write_freesurfer_subject(local_fs_dir(root))
+    record_local_reconstruction(root)
     first = prepare_asset(root, resolve_subject(root, "local/me")).asset_id
     vertices, faces = surface_vertices("lh", "pial")
     write_surface(fs / "surf" / "lh.pial", vertices + 0.5, faces)
+    record_local_reconstruction(root)
     assert prepare_asset(root, resolve_subject(root, "local/me")).asset_id != first
 
 
 def test_fsaverage_asset_is_template_with_mni305_transform_and_default(root: DataRoot) -> None:
     write_freesurfer_subject(fsaverage_dir(root))
     write_freesurfer_subject(local_fs_dir(root))
+    record_dataset_files(root, "fsaverage")
+    record_local_reconstruction(root)
     template = prepare_asset(root, resolve_subject(root, "fsaverage"), clock=fixed_clock)
     prepare_asset(root, resolve_subject(root, "local/me"), clock=fixed_clock)
     manifest = AssetStore(root).manifest(template.asset_id)
@@ -103,6 +113,7 @@ def test_fsaverage_asset_is_template_with_mni305_transform_and_default(root: Dat
 
 def test_subject_without_surfaces_cannot_be_prepared(root: DataRoot) -> None:
     write_freesurfer_subject(local_fs_dir(root), kinds=("pial", "white"))
+    record_local_reconstruction(root)
     with pytest.raises(AnatomyError) as info:
         prepare_asset(root, resolve_subject(root, "local/me"))
     assert info.value.code == "no-surfaces"
@@ -112,13 +123,43 @@ def test_surfaces_from_different_reconstructions_are_rejected(root: DataRoot) ->
     fs = write_freesurfer_subject(local_fs_dir(root), orig=False)
     vertices, faces = surface_vertices("rh", "white")
     write_surface(fs / "surf" / "rh.white", vertices, faces, cras=(9.0, 9.0, 9.0))
+    record_local_reconstruction(root)
     with pytest.raises(AnatomyError) as info:
         prepare_asset(root, resolve_subject(root, "local/me"))
     assert info.value.code == "inconsistent-transform"
 
 
+def test_corresponding_surfaces_must_have_identical_face_topology(root: DataRoot) -> None:
+    fs = write_freesurfer_subject(local_fs_dir(root))
+    vertices, faces = surface_vertices("lh", "white")
+    write_surface(fs / "surf" / "lh.white", vertices, np.roll(faces, 1, axis=0))
+    record_local_reconstruction(root)
+    with pytest.raises(AnatomyError) as info:
+        prepare_asset(root, resolve_subject(root, "local/me"))
+    assert info.value.code == "invalid-surface"
+    assert "topology" in info.value.message
+
+
+def test_local_preparation_requires_passed_reconstruction_qc(root: DataRoot) -> None:
+    write_freesurfer_subject(local_fs_dir(root))
+    record_local_reconstruction(root)
+    subject = resolve_subject(root, "local/me")
+    write_reconstruction_record(
+        root,
+        subject,
+        tool_name="synthetic-test",
+        tool_version="1",
+        command_summary="synthetic test reconstruction",
+        qc_status="not-reviewed",
+    )
+    with pytest.raises(DatasetError) as info:
+        prepare_asset(root, subject)
+    assert info.value.code == "reconstruction-qc-incomplete"
+
+
 def test_explicit_missing_atlas_is_an_error(root: DataRoot) -> None:
     write_freesurfer_subject(local_fs_dir(root), atlases=("aparc",))
+    record_local_reconstruction(root)
     with pytest.raises(AnatomyError) as info:
         prepare_asset(root, resolve_subject(root, "local/me"), atlases=["aparc.DKTatlas"])
     assert info.value.code == "missing-file"
@@ -129,6 +170,7 @@ def test_explicit_missing_atlas_is_an_error(root: DataRoot) -> None:
 
 def test_tampered_buffer_fails_verification_and_reprepare(root: DataRoot) -> None:
     write_freesurfer_subject(local_fs_dir(root))
+    record_local_reconstruction(root)
     subject = resolve_subject(root, "local/me")
     prepared = prepare_asset(root, subject)
     store = AssetStore(root)
@@ -147,6 +189,7 @@ def test_tampered_buffer_fails_verification_and_reprepare(root: DataRoot) -> Non
 
 def test_store_serves_only_manifest_listed_files(root: DataRoot) -> None:
     write_freesurfer_subject(local_fs_dir(root))
+    record_local_reconstruction(root)
     prepared = prepare_asset(root, resolve_subject(root, "local/me"))
     store = AssetStore(root)
     assert store.buffer_path(prepared.asset_id, "lh.pial.indices.u32").is_file()
@@ -162,6 +205,7 @@ def test_store_serves_only_manifest_listed_files(root: DataRoot) -> None:
 
 def test_invalid_manifest_is_reported_not_listed(root: DataRoot) -> None:
     write_freesurfer_subject(local_fs_dir(root))
+    record_local_reconstruction(root)
     prepared = prepare_asset(root, resolve_subject(root, "local/me"))
     manifest = prepared.path / "manifest.json"
     document = json.loads(manifest.read_text())
@@ -169,7 +213,9 @@ def test_invalid_manifest_is_reported_not_listed(root: DataRoot) -> None:
     manifest.write_text(json.dumps(document))
     assets, problems = AssetStore(root).assets()
     assert assets == [] and len(problems) == 1
-    assert AssetStore(root).catalog().default_asset_id is None
+    with pytest.raises(AnatomyError) as info:
+        AssetStore(root).catalog()
+    assert info.value.code == "corrupt-asset"
 
 
 def test_empty_store_has_empty_catalog(root: DataRoot) -> None:

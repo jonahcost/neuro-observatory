@@ -36,12 +36,14 @@ Acquisition (`neuro_engine.acquisition`) never imports `datasets` or `anatomy`. 
 | Frame | Definition | Used for |
 | --- | --- | --- |
 | `freesurfer-surface-ras` | FreeSurfer "tkrRAS": +x right, +y anterior, +z superior, millimetres, origin at the centre of the conformed 256³ volume | All asset geometry, exactly as stored in `surf/?h.*` |
-| `scanner-ras` | The scanner RAS of the subject's MRI, mm | Volumes (NIfTI/MGH affines) |
+| `scanner-ras` | Scanner/device RAS, mm | MGH and NIfTI xform code 1 |
+| `aligned-ras` / `talairach-ras` / `mni-ras` | Aligned or standard-space RAS named by the NIfTI xform code | NIfTI xform codes 2/3/4 |
 | `mni305-ras` | MNI305 RAS, mm | fsaverage only, where it equals surface RAS |
 
 - **Surface RAS → scanner RAS** is a pure translation by FreeSurfer's `c_ras`. When `mri/orig.mgz` is present it is computed as `vox2ras · inv(vox2ras_tkr)` from that header and cross-checked against the `c_ras` stored in every surface's `volume_info`; a disagreement above 0.01 mm fails the asset (`inconsistent-transform`). Without `orig.mgz` the surface `c_ras` is used and the manifest says so in `transforms[].source`.
 - **No arbitrary scaling.** Assets are not re-centred, scaled, decimated or re-oriented. Vertex order and count are preserved, so future source spaces and per-vertex values index the same vertices.
 - **Precision.** FreeSurfer stores surfaces as big-endian float32; assets store the same values as little-endian float32, so asset positions equal the source values exactly. Scientific computation (BEM, source spaces, registration) still reads FreeSurfer files through nibabel or MNE, not the render asset.
+- **NIfTI truthfulness.** Valid qform and sform transforms must agree across the volume. Their xform code determines the reported world frame; an aligned or MNI transform is not called scanner RAS. Spatial units must be millimetres, unless the user explicitly supplies `--assume-mm`; that declaration is retained in acquisition provenance.
 - **LPS** (DICOM/ITK) is not used. A future DICOM path must convert explicitly with `diag(-1, -1, 1)`.
 - **MNE** works in metres and calls surface RAS the `mri` frame; Neuromag `head` coordinates (from NAS/LPA/RPA) are a different frame. Conversions belong at the MNE boundary, in named functions.
 
@@ -59,7 +61,7 @@ Canonical schema: [`packages/protocol/schemas/anatomy-asset.v1.schema.json`](../
 
 - `anatomy.asset` (`manifest.json`): subject reference, `anatomyKind` (`template` | `reference-subject` | `personal`), MRI acquisition facts with their source (`sidecar`, `dataset-readme`, `site-documentation`, `user-declared`), `coordinateFrame: "freesurfer-surface-ras"`, `units: "mm"`, transforms, surfaces, parcellations, provenance (pipeline, version, tools, source files with data-root-relative paths and SHA-256) and license.
 - Buffers, little-endian: `<hemi>.<surface>.positions.f32` (`float32[3N]`, mm), `<hemi>.<surface>.indices.u32` (`uint32[3M]`, counter-clockwise seen from outside), `<hemi>.<atlas>.labels.i32` (`int32[N]`, −1 = unlabelled). Each buffer has a declared byte length and SHA-256.
-- `assetId = <subject-slug>-<first 16 hex of sha256(identity)>`, where the identity covers the source file hashes, options and pipeline version. Preparing the same inputs twice gives the same ID and bytes; assets are staged and renamed atomically.
+- `assetId = <subject-slug>-<first 32 hex of sha256(identity)>`, where the identity covers source hashes, options, pipeline version and output-affecting tool versions. Preparing the same derivation gives the same ID and deterministic buffers. `preparedAtUtc` is operational metadata, so regenerated manifest bytes are not claimed identical. Assets are staged and renamed atomically.
 - The desktop client re-checks every buffer (byte length, SHA-256 via Web Crypto, finite coordinates inside the declared bounds, triangle indices in range, only declared labels or −1) before uploading it to the GPU. A mismatch is shown as an error with Retry, never rendered.
 
 Endpoints (engine, loopback; [`api/anatomy.py`](../../services/neuro-engine/src/neuro_engine/api/anatomy.py)):
@@ -68,7 +70,9 @@ Endpoints (engine, loopback; [`api/anatomy.py`](../../services/neuro-engine/src/
 | --- | --- |
 | `GET /api/anatomy/v1/catalog` | `anatomy.catalog`: valid assets (rescanned per request) and `defaultAssetId` (newest template) |
 | `GET /api/anatomy/v1/assets/{assetId}/manifest.json` | The manifest (`Cache-Control: no-cache`) |
-| `GET /api/anatomy/v1/assets/{assetId}/files/{name}` | A buffer listed in that manifest (`immutable`); anything else is 404 |
+| `GET /api/anatomy/v1/assets/{assetId}/files/{name}` | A listed buffer only after full asset verification (`immutable`); anything else is 404 and corruption is a server error |
+
+Personal FreeSurfer imports require a previously imported T1 and a versioned reconstruction record: tool/version, privacy-safe command/configuration summary, input and output hashes, and QC status. Only `passed` reconstruction QC can be prepared.
 
 ## Overlay contract (no producer)
 

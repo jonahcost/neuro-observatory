@@ -70,8 +70,8 @@ def _datasets_list(args: argparse.Namespace, root: DataRoot, out: _Output) -> in
             }
         )
     out.emit(
-        {"dataRoot": str(root.path), "datasets": rows},
-        lambda: f"data root: {root.path}\n"
+        {"dataRoot": "private-local", "datasets": rows},
+        lambda: "data root: private local directory\n"
         + "\n".join(
             f"  {r['id']:<10} {r['version']:<24} {r['anatomyKind']:<18} {r['license']:<28} "
             f"{'acquired ' + str(r['acquiredFiles']) + ' files' if r['acquiredFiles'] else 'not acquired'}"
@@ -117,7 +117,8 @@ def _datasets_fetch(args: argparse.Namespace, root: DataRoot, out: _Output) -> i
         from neuro_engine.datasets.fsaverage import fetch_fsaverage
 
         path = fetch_fsaverage(root, accept_license=args.accept_license)
-        out.emit({"dataset": "fsaverage", "subjectDir": str(path)}, f"fsaverage ready: {path}")
+        relative = path.relative_to(root.path).as_posix()
+        out.emit({"dataset": "fsaverage", "subjectDir": relative}, f"fsaverage ready: {relative}")
     elif args.dataset == "ds000248":
         from neuro_engine.datasets.openneuro import fetch_openneuro
 
@@ -133,7 +134,13 @@ def _datasets_fetch(args: argparse.Namespace, root: DataRoot, out: _Output) -> i
 
         if not args.subject:
             raise DatasetError("missing-subject", "IXI fetches one subject at a time", "pass --subject IXI012-HH-1211")
-        path = fetch_ixi_subject(root, args.subject, accept_license=args.accept_license, progress=_progress())
+        path = fetch_ixi_subject(
+            root,
+            args.subject,
+            accept_license=args.accept_license,
+            assume_mm=args.assume_mm,
+            progress=_progress(),
+        )
         out.emit({"dataset": "ixi", "file": path.name}, f"IXI {args.subject} verified: {path.name}")
     else:
         raise DatasetError("not-fetchable", f"'{args.dataset}' cannot be fetched", "use 'datasets import-mri' for local data")
@@ -143,7 +150,7 @@ def _datasets_fetch(args: argparse.Namespace, root: DataRoot, out: _Output) -> i
 def _datasets_import_ixi(args: argparse.Namespace, root: DataRoot, out: _Output) -> int:
     from neuro_engine.datasets.ixi import import_ixi_file
 
-    path = import_ixi_file(root, Path(args.file), accept_license=args.accept_license)
+    path = import_ixi_file(root, Path(args.file), accept_license=args.accept_license, assume_mm=args.assume_mm)
     out.emit({"dataset": "ixi", "file": path.name}, f"imported and verified {path.name}")
     return 0
 
@@ -152,7 +159,13 @@ def _datasets_import_mri(args: argparse.Namespace, root: DataRoot, out: _Output)
     from neuro_engine.datasets.local import import_mri
 
     path = import_mri(
-        root, Path(args.file), args.label, field_strength_tesla=args.field_strength, sequence=args.sequence, scanner=args.scanner
+        root,
+        Path(args.file),
+        args.label,
+        field_strength_tesla=args.field_strength,
+        sequence=args.sequence,
+        scanner=args.scanner,
+        assume_mm=args.assume_mm,
     )
     out.emit({"subject": f"local/{args.label}", "file": path.name}, f"imported T1 for local/{args.label}")
     return 0
@@ -161,8 +174,38 @@ def _datasets_import_mri(args: argparse.Namespace, root: DataRoot, out: _Output)
 def _datasets_import_freesurfer(args: argparse.Namespace, root: DataRoot, out: _Output) -> int:
     from neuro_engine.datasets.local import import_freesurfer
 
-    import_freesurfer(root, Path(args.subject_dir), args.label)
+    import_freesurfer(
+        root,
+        Path(args.subject_dir),
+        args.label,
+        tool_name=args.tool,
+        tool_version=args.tool_version,
+        command_summary=args.command_summary,
+        qc_status=args.qc_status,
+        qc_notes=args.qc_notes or "",
+    )
     out.emit({"subject": f"local/{args.label}"}, f"imported FreeSurfer subject as local/{args.label}")
+    return 0
+
+
+def _datasets_register_reconstruction(args: argparse.Namespace, root: DataRoot, out: _Output) -> int:
+    from neuro_engine.datasets.reconstruction import write_reconstruction_record
+    from neuro_engine.datasets.subjects import resolve_subject
+
+    subject = resolve_subject(root, args.subject)
+    path = write_reconstruction_record(
+        root,
+        subject,
+        tool_name=args.tool,
+        tool_version=args.tool_version,
+        command_summary=args.command_summary,
+        qc_status=args.qc_status,
+        qc_notes=args.qc_notes or "",
+    )
+    out.emit(
+        {"subject": subject.key, "record": path.name, "qcStatus": args.qc_status},
+        f"recorded reconstruction provenance for {subject.key}: QC {args.qc_status}",
+    )
     return 0
 
 
@@ -227,7 +270,7 @@ def _datasets_inspect_eeg(args: argparse.Namespace, root: DataRoot, out: _Output
 def _anatomy_check_mri(args: argparse.Namespace, root: DataRoot, out: _Output) -> int:
     from neuro_engine.anatomy.volumes import check_mri
 
-    check = check_mri(Path(args.file), read_data=True)
+    check = check_mri(Path(args.file), read_data=True, assume_mm=args.assume_mm)
     out.emit(
         {"volume": check.info.summary(), "findings": [{"level": f.level, "code": f.code, "message": f.message} for f in check.findings]},
         lambda: "\n".join(f"  {k}: {v}" for k, v in check.info.summary().items()) + "\n" + _findings_text(check.findings),
@@ -328,11 +371,13 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--profile", default="anatomy", choices=["anatomy", "full"], help="ds000248 file selection")
     p.add_argument("--confirm-large", action="store_true", help="allow downloads above 500 MB")
     p.add_argument("--subject", help="IXI subject, e.g. IXI012-HH-1211")
+    p.add_argument("--assume-mm", action="store_true", help="explicitly treat unset NIfTI spatial units as millimetres")
     p.set_defaults(handler=_datasets_fetch)
     p = datasets.add_parser("import", help="import an IXI T1 file you downloaded yourself")
     p.add_argument("dataset", choices=["ixi"])
     p.add_argument("file")
     p.add_argument("--accept-license", action="store_true")
+    p.add_argument("--assume-mm", action="store_true", help="explicitly treat unset NIfTI spatial units as millimetres")
     p.set_defaults(handler=_datasets_import_ixi)
     p = datasets.add_parser("import-mri", help="import a personal T1 volume (NIfTI or MGZ)")
     p.add_argument("file")
@@ -340,11 +385,25 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--field-strength", type=float, help="tesla, as declared by you")
     p.add_argument("--sequence")
     p.add_argument("--scanner")
+    p.add_argument("--assume-mm", action="store_true", help="explicitly treat unset NIfTI spatial units as millimetres")
     p.set_defaults(handler=_datasets_import_mri)
     p = datasets.add_parser("import-freesurfer", help="import an existing FreeSurfer subject directory")
     p.add_argument("subject_dir")
     p.add_argument("--label", required=True)
+    p.add_argument("--tool", required=True, help="reconstruction tool, e.g. freesurfer or fastsurfer")
+    p.add_argument("--tool-version", required=True)
+    p.add_argument("--command-summary", required=True, help="privacy-safe command/config summary without identifying paths")
+    p.add_argument("--qc-status", required=True, choices=["passed", "failed", "not-reviewed"])
+    p.add_argument("--qc-notes")
     p.set_defaults(handler=_datasets_import_freesurfer)
+    p = datasets.add_parser("register-reconstruction", help="record tool, inputs, outputs and QC for an external reconstruction")
+    p.add_argument("subject")
+    p.add_argument("--tool", required=True)
+    p.add_argument("--tool-version", required=True)
+    p.add_argument("--command-summary", required=True, help="privacy-safe command/config summary without identifying paths")
+    p.add_argument("--qc-status", required=True, choices=["passed", "failed", "not-reviewed"])
+    p.add_argument("--qc-notes")
+    p.set_defaults(handler=_datasets_register_reconstruction)
     p = datasets.add_parser("validate", help="re-hash acquired files against the provenance record")
     p.add_argument("dataset")
     p.set_defaults(handler=_datasets_validate)
@@ -360,6 +419,7 @@ def build_parser() -> argparse.ArgumentParser:
     anatomy = groups.add_parser("anatomy", help="validate MRI and prepare app-ready anatomy").add_subparsers(dest="command", required=True)
     p = anatomy.add_parser("check-mri", help="validate a T1 volume as FreeSurfer input")
     p.add_argument("file")
+    p.add_argument("--assume-mm", action="store_true", help="explicitly treat unset NIfTI spatial units as millimetres")
     p.set_defaults(handler=_anatomy_check_mri)
     p = anatomy.add_parser("prepare", help="convert a subject's FreeSurfer surfaces into an anatomy asset")
     p.add_argument("subject", help="subject key, e.g. fsaverage or ds000248/sub-01")

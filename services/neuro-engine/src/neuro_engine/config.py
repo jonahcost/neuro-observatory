@@ -7,6 +7,7 @@ from collections.abc import Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Literal
+from urllib.parse import urlsplit
 
 from neuro_engine.acquisition.base import DeviceConfigError
 from neuro_engine.acquisition.service import ReconnectPolicy
@@ -45,6 +46,17 @@ class EngineSettings:
             raise SettingsError("live_view_queue_blocks must be in [1, 10000]")
         if not 0 < self.status_interval_s <= 60:
             raise SettingsError("status_interval_s must be in (0, 60]")
+        for origin in self.allowed_origins:
+            parsed = urlsplit(origin)
+            if (
+                origin == "*"
+                or parsed.scheme not in ("http", "https")
+                or parsed.hostname not in ("localhost", "127.0.0.1", "::1")
+                or parsed.path not in ("", "/")
+                or parsed.query
+                or parsed.fragment
+            ):
+                raise SettingsError("allowed_origins must contain explicit loopback HTTP(S) origins; wildcard CORS is forbidden")
 
     @classmethod
     def from_env(cls, env: Mapping[str, str] | None = None) -> EngineSettings:

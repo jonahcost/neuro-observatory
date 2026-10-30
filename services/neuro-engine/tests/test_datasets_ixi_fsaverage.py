@@ -96,6 +96,18 @@ def test_member_that_is_not_valid_gzip_is_deleted(tmp_path: Path, archive: tuple
     assert not (root.raw("ixi", IXI_VERSION) / "IXI013-HH-1212-T1.nii.gz").exists()
 
 
+def test_same_size_ixi_substitution_is_not_rebaselined_or_deleted(tmp_path: Path, archive: tuple[bytes, bytes]) -> None:
+    root = DataRoot(tmp_path)
+    server = FakeServer({IXI_T1_TAR_URL: archive[0]})
+    path = fetch_ixi_subject(root, "IXI012-HH-1211", accept_license=True, opener=server)
+    substituted = bytes([path.read_bytes()[0] ^ 0xFF]) + path.read_bytes()[1:]
+    path.write_bytes(substituted)
+    with pytest.raises(DatasetError) as info:
+        fetch_ixi_subject(root, "IXI012-HH-1211", accept_license=True, opener=server)
+    assert info.value.code == "existing-file-mismatch"
+    assert path.read_bytes() == substituted
+
+
 def test_local_import_validates_and_refuses_overwrite(tmp_path: Path, archive: tuple[bytes, bytes]) -> None:
     root = DataRoot(tmp_path / "data")
     source = tmp_path / "downloads" / HH
@@ -171,3 +183,13 @@ def test_fsaverage_incomplete_or_failed_fetch(tmp_path: Path, monkeypatch: pytes
     with pytest.raises(DatasetError) as failed:
         fetch_fsaverage(DataRoot(tmp_path / "b"), accept_license=True, fetch=broken)
     assert failed.value.code == "fetch-failed"
+
+
+def test_fsaverage_existing_files_must_still_match_provenance(tmp_path: Path) -> None:
+    root = DataRoot(tmp_path)
+    fetch_fsaverage(root, accept_license=True, fetch=fake_mne_fetch)
+    target = root.raw("fsaverage", get_dataset("fsaverage").version) / FSAVERAGE_ANATOMY_FILES[0]
+    target.write_bytes(b"tampered")
+    with pytest.raises(DatasetError) as info:
+        fetch_fsaverage(root, accept_license=True, fetch=fake_mne_fetch)
+    assert info.value.code == "existing-file-mismatch"

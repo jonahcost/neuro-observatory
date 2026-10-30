@@ -144,6 +144,15 @@ def test_corrupted_upstream_file_is_rejected(tmp_path: Path) -> None:
     assert info.value.code == "checksum-mismatch"
 
 
+def test_unknown_openneuro_checksum_identifier_is_rejected(tmp_path: Path) -> None:
+    graph = FakeGraphQL()
+    readme = next(entry for entry in graph.trees[None] if entry["filename"] == "README")
+    readme["id"] = "unsupported-checksum"
+    with pytest.raises(DatasetError) as info:
+        fetch_openneuro(DataRoot(tmp_path), post_json=graph, opener=server())
+    assert info.value.code == "unsupported-checksum"
+
+
 def test_large_profile_needs_confirmation(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr("neuro_engine.datasets.openneuro.LARGE_DOWNLOAD_BYTES", 10)
     with pytest.raises(DatasetError) as info:

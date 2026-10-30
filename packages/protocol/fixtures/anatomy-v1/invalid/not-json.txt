@@ -1,1 +1,1 @@
-{"type": "anatomy.asset", 
+{"type": "anatomy.asset",

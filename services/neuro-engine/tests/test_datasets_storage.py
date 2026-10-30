@@ -3,6 +3,8 @@ from __future__ import annotations
 import hashlib
 import shutil
 import subprocess
+import threading
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 import pytest
@@ -152,6 +154,34 @@ def test_corrupt_record_is_reported(tmp_path: Path) -> None:
     with pytest.raises(DatasetError) as info:
         read_record(root, "ixi", get_dataset("ixi").version)
     assert info.value.code == "corrupt-provenance"
+
+
+def test_record_identity_must_match_requested_dataset(tmp_path: Path) -> None:
+    root = DataRoot(tmp_path)
+    path = root.acquisition_record("ixi", get_dataset("ixi").version)
+    path.parent.mkdir(parents=True)
+    record = new_record(get_dataset("ds000248"))
+    path.write_text(record.model_dump_json())
+    with pytest.raises(DatasetError) as info:
+        read_record(root, "ixi", get_dataset("ixi").version)
+    assert info.value.code == "corrupt-provenance"
+
+
+def test_concurrent_record_updates_are_merged_under_one_lock(tmp_path: Path) -> None:
+    root = DataRoot(tmp_path)
+    spec = get_dataset("ixi")
+    barrier = threading.Barrier(2)
+
+    def update(name: str) -> None:
+        record = new_record(spec)
+        record.upsert_files([AcquiredFile(path=name, bytes=1, sha256="0" * 64)])
+        barrier.wait()
+        write_record(root, record)
+
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        list(pool.map(update, ("a.nii.gz", "b.nii.gz")))
+    record = read_record(root, spec.id, spec.version)
+    assert record is not None and set(record.file_index()) == {"a.nii.gz", "b.nii.gz"}
 
 
 def test_record_paths_must_be_relative() -> None:

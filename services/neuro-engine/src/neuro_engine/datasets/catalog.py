@@ -33,6 +33,7 @@ class MriAcquisitionFacts:
     scanner: str | None
     source: AcquisitionSource
     parameters: tuple[tuple[str, str], ...] = ()
+    spatial_units_assumed_mm: bool = False
 
 
 @dataclass(frozen=True, slots=True)

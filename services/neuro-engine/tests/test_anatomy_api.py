@@ -3,10 +3,11 @@
 from __future__ import annotations
 
 import hashlib
+import json
 from pathlib import Path
 
 import pytest
-from anatomy_fixtures import write_freesurfer_subject
+from anatomy_fixtures import record_dataset_files, write_freesurfer_subject
 from fastapi.testclient import TestClient
 
 from neuro_engine.anatomy.assets import prepare_asset
@@ -34,6 +35,7 @@ def client(data_root: DataRoot) -> TestClient:
 @pytest.fixture
 def asset_id(data_root: DataRoot) -> str:
     write_freesurfer_subject(data_root.raw("fsaverage", get_dataset("fsaverage").version) / "fsaverage")
+    record_dataset_files(data_root, "fsaverage")
     return prepare_asset(data_root, resolve_subject(data_root, "fsaverage")).asset_id
 
 
@@ -101,3 +103,17 @@ def test_invalid_manifest_is_a_server_error(client: TestClient, asset_id: str, d
     assert response.status_code == 500
     assert response.json()["error"]["code"] == "invalid-manifest"
     assert str(data_root.path) not in response.text
+
+
+def test_semantically_corrupt_asset_buffer_is_never_served_immutable(
+    client: TestClient, asset_id: str, data_root: DataRoot
+) -> None:
+    manifest_path = data_root.anatomy_assets / asset_id / "manifest.json"
+    document = json.loads(manifest_path.read_text())
+    mesh = document["surfaces"][0]
+    mesh["boundsMm"]["max"][0] += 10
+    manifest_path.write_text(json.dumps(document))
+    response = client.get(f"{API}/assets/{asset_id}/files/{mesh['positions']['file']}")
+    assert response.status_code == 500
+    assert response.json()["error"]["code"] == "corrupt-asset"
+    assert "immutable" not in response.headers.get("cache-control", "")

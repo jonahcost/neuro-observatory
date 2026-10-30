@@ -152,6 +152,51 @@
       "file": "invalid/catalog-duplicate-asset.json",
       "expect": "semantic",
       "description": "Asset IDs are unique"
+    },
+    {
+      "file": "invalid/asset-label-index-overflow.json",
+      "expect": "schema",
+      "description": "Parcellation label indices must fit the int32 label buffer"
+    },
+    {
+      "file": "invalid/asset-source-parent-segment.json",
+      "expect": "semantic",
+      "description": "Source paths cannot escape the data root"
+    },
+    {
+      "file": "invalid/asset-source-empty-segment.json",
+      "expect": "semantic",
+      "description": "Source paths cannot contain empty segments"
+    },
+    {
+      "file": "invalid/asset-unicode-timestamp.json",
+      "expect": "schema",
+      "description": "UTC timestamps use ASCII digits"
+    },
+    {
+      "file": "invalid/asset-impossible-timestamp.json",
+      "expect": "semantic",
+      "description": "UTC timestamps must be real calendar seconds"
+    },
+    {
+      "file": "invalid/asset-template-acquisition-facts.json",
+      "expect": "semantic",
+      "description": "Templates have no single-scan acquisition facts"
+    },
+    {
+      "file": "invalid/asset-reference-not-applicable.json",
+      "expect": "semantic",
+      "description": "Reference subjects require an applicable acquisition source"
+    },
+    {
+      "file": "invalid/asset-duplicate-transform-target.json",
+      "expect": "semantic",
+      "description": "Only one transform to each target frame is allowed"
+    },
+    {
+      "file": "invalid/asset-singular-transform.json",
+      "expect": "semantic",
+      "description": "Transform linear components must be invertible"
     }
   ]
 }

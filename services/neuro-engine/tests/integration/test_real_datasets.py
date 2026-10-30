@@ -6,6 +6,8 @@ Each test skips (with the command to run) when its dataset is absent.
 from __future__ import annotations
 
 import os
+import shutil
+from pathlib import Path
 
 import numpy as np
 import pytest
@@ -15,7 +17,7 @@ from neuro_engine.anatomy.volumes import check_mri
 from neuro_engine.datasets.catalog import get_dataset
 from neuro_engine.datasets.errors import DatasetError
 from neuro_engine.datasets.ixi import verify_gzip
-from neuro_engine.datasets.provenance import read_record, verify_record
+from neuro_engine.datasets.provenance import read_record, verify_record, write_record
 from neuro_engine.datasets.storage import ENV_DATA_DIR, DataRoot, resolve_data_root
 from neuro_engine.datasets.subjects import SubjectSource, check_subject, resolve_subject
 
@@ -47,6 +49,26 @@ def assert_record_verifies(root: DataRoot, dataset_id: str) -> None:
     assert verify_record(root, record) == []
 
 
+def isolated_dataset_root(source: DataRoot, dataset_id: str, destination: Path) -> DataRoot:
+    """Clone public test inputs into a fresh root so preparation cannot reuse a cached asset."""
+    spec = get_dataset(dataset_id)
+    record = read_record(source, spec.id, spec.version)
+    assert record is not None
+    root = DataRoot(destination)
+    source_base = source.raw(spec.id, spec.version)
+    target_base = root.raw(spec.id, spec.version)
+    for entry in record.files:
+        src = source_base / entry.path
+        dst = target_base / entry.path
+        dst.parent.mkdir(parents=True, exist_ok=True)
+        try:
+            os.link(src, dst)
+        except OSError:
+            shutil.copy2(src, dst)
+    write_record(root, record.model_copy(deep=True))
+    return root
+
+
 def enclosed_volume_cm3(positions: np.ndarray, triangles: np.ndarray) -> float:
     """Signed volume of a closed mesh; positive when triangles wind counter-clockwise seen from outside."""
     v = positions.astype(np.float64)[triangles]
@@ -65,12 +87,15 @@ def assert_outward_closed_surfaces(store: AssetStore, asset_id: str) -> None:
             assert low < volume < high, f"{hemisphere}.{surface}: {volume:.1f} cm³"
 
 
-def test_fsaverage_end_to_end(data_root: DataRoot) -> None:
-    subject = subject_or_skip(data_root, "fsaverage", "fsaverage --accept-license")
+def test_fsaverage_end_to_end(data_root: DataRoot, tmp_path: Path) -> None:
+    subject_or_skip(data_root, "fsaverage", "fsaverage --accept-license")
     assert_record_verifies(data_root, "fsaverage")
+    isolated = isolated_dataset_root(data_root, "fsaverage", tmp_path / "fresh-fsaverage")
+    subject = resolve_subject(isolated, "fsaverage")
     assert not [f for f in check_subject(subject) if f.level == "error"]
-    prepared = prepare_asset(data_root, subject)
-    store = AssetStore(data_root)
+    prepared = prepare_asset(isolated, subject)
+    assert prepared.created
+    store = AssetStore(isolated)
     assert store.verify(prepared.asset_id) == []
     asset = store.manifest(prepared.asset_id)
     assert asset.anatomy_kind == "template"
@@ -90,21 +115,30 @@ def test_fsaverage_end_to_end(data_root: DataRoot) -> None:
     assert {p.atlas for p in asset.parcellations} >= {"aparc", "aparc.a2009s"}
 
 
-def test_ds000248_sub01_end_to_end(data_root: DataRoot) -> None:
-    subject = subject_or_skip(data_root, "ds000248/sub-01", "ds000248")
+def test_ds000248_sub01_end_to_end(data_root: DataRoot, tmp_path: Path) -> None:
+    subject_or_skip(data_root, "ds000248/sub-01", "ds000248")
     assert_record_verifies(data_root, "ds000248")
+    isolated = isolated_dataset_root(data_root, "ds000248", tmp_path / "fresh-ds000248")
+    subject = resolve_subject(isolated, "ds000248/sub-01")
     findings = check_subject(subject)
     assert not [f for f in findings if f.level == "error"], findings
     codes = {f.code for f in findings}
     assert "rawavg-matches-t1" in codes and "landmarks" in codes
-    prepared = prepare_asset(data_root, subject)
-    store = AssetStore(data_root)
+    prepared = prepare_asset(isolated, subject)
+    assert prepared.created
+    store = AssetStore(isolated)
     assert store.verify(prepared.asset_id) == []
     asset = store.manifest(prepared.asset_id)
     assert asset.anatomy_kind == "reference-subject"
     assert asset.acquisition.field_strength_tesla == 1.5 and asset.acquisition.source == "dataset-readme"
     scanner = next(t for t in asset.transforms if t.to == "scanner-ras")
     assert "orig.mgz" in scanner.source  # cross-checked against the surfaces' c_ras
+    assert {p.atlas for p in asset.parcellations} >= {"aparc", "aparc.a2009s", "aparc.dktatlas"}
+    assert {(p.atlas, p.hemisphere) for p in asset.parcellations if p.atlas == "aparc"} == {
+        ("aparc", "lh"),
+        ("aparc", "rh"),
+    }
+    assert all(len(p.labels) > 30 for p in asset.parcellations)
     assert_outward_closed_surfaces(store, prepared.asset_id)
 
 
@@ -116,6 +150,9 @@ def test_ds000248_eeg_metadata(data_root: DataRoot) -> None:
     result = inspect_eeg(subject)
     assert result.eeg_channels == 60
     assert result.sampling_rate_hz == pytest.approx(600.615, abs=1e-3)
+    assert result.digitized_eeg_positions >= 60
+    assert set(result.fiducials) == {"LPA", "NASION", "RPA"}
+    assert result.head_shape_points == 78
     assert result.source_localization_ready is False
     assert result.missing_for_source_localization
 

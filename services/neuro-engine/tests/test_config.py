@@ -20,13 +20,13 @@ def test_environment_overrides() -> None:
             "NEURO_ENGINE_SYNTHETIC_SEED": "42",
             "NEURO_ENGINE_SYNTHETIC_BLOCK_SIZE": "5",
             "NEURO_ENGINE_LIVE_VIEW_QUEUE_BLOCKS": "10",
-            "NEURO_ENGINE_ALLOWED_ORIGINS": "http://localhost:1420, tauri://localhost",
+            "NEURO_ENGINE_ALLOWED_ORIGINS": "http://localhost:1420, http://127.0.0.1:4200",
         }
     )
     assert settings.synthetic.seed == 42
     assert settings.synthetic.block_size == 5
     assert settings.live_view_queue_blocks == 10
-    assert settings.allowed_origins == {"http://localhost:1420", "tauri://localhost"}
+    assert settings.allowed_origins == {"http://localhost:1420", "http://127.0.0.1:4200"}
 
 
 @pytest.mark.parametrize(
@@ -37,6 +37,9 @@ def test_environment_overrides() -> None:
         {"NEURO_ENGINE_SYNTHETIC_SEED": "-3"},
         {"NEURO_ENGINE_SYNTHETIC_BLOCK_SIZE": "0"},
         {"NEURO_ENGINE_LIVE_VIEW_QUEUE_BLOCKS": "0"},
+        {"NEURO_ENGINE_ALLOWED_ORIGINS": "*"},
+        {"NEURO_ENGINE_ALLOWED_ORIGINS": "https://example.com"},
+        {"NEURO_ENGINE_ALLOWED_ORIGINS": "tauri://localhost"},
     ],
 )
 def test_invalid_environment_fails_fast(env: dict[str, str], monkeypatch: pytest.MonkeyPatch) -> None:

@@ -11,9 +11,9 @@ from __future__ import annotations
 
 import hashlib
 import json
-import os
 import re
 import shutil
+import tempfile
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from pathlib import Path
@@ -39,14 +39,16 @@ from neuro_engine.anatomy.transforms import (
 )
 from neuro_engine.datasets.integrity import sha256_file
 from neuro_engine.datasets.provenance import utc_now
-from neuro_engine.datasets.storage import DataRoot
+from neuro_engine.datasets.reconstruction import verify_subject_source_provenance
+from neuro_engine.datasets.storage import DataRoot, private_mkdir
 from neuro_engine.datasets.subjects import SubjectSource
 from neuro_engine.protocol import anatomy_v1 as contract
 from neuro_engine.protocol.v2 import ProtocolError
 
 PIPELINE = "neuro-engine.anatomy.prepare"
-PIPELINE_VERSION = "1"
+PIPELINE_VERSION = "2"
 MANIFEST = "manifest.json"
+MAX_MANIFEST_BYTES = 8_000_000
 _ASSET_DIR = re.compile(r"^[a-z0-9][a-z0-9._-]{0,127}$")
 CRAS_SURFACE_TOLERANCE_MM = 1e-3
 
@@ -97,10 +99,14 @@ def _source_files(subject: SubjectSource, surfaces: Sequence[str], atlases: Sequ
     orig = fs / "mri" / "orig.mgz"
     if orig.is_file():
         files["mri.orig"] = orig
+    build_stamp = fs / "scripts" / "build-stamp.txt"
+    if build_stamp.is_file():
+        files["reconstruction.build-stamp"] = build_stamp
     return files, used
 
 
 def _asset_id(subject: SubjectSource, sources: dict[str, tuple[str, int, str]]) -> str:
+    tools = [(tool.name, tool.version) for tool in _tool_versions()]
     identity = {
         "pipeline": PIPELINE,
         "pipelineVersion": PIPELINE_VERSION,
@@ -115,9 +121,10 @@ def _asset_id(subject: SubjectSource, sources: dict[str, tuple[str, int, str]]) 
             subject.acquisition.source,
         ],
         "sources": sorted(sources.items()),
+        "tools": tools,
     }
     digest = hashlib.sha256(json.dumps(identity, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
-    return f"{_subject_slug(subject.key)}-{digest[:16]}"
+    return f"{_subject_slug(subject.key)}-{digest[:32]}"
 
 
 def _buffer(directory: Path, name: str, array: NDArray, dtype: str) -> contract.BufferRef:
@@ -166,6 +173,7 @@ def prepare_asset(
     if not kinds or len(kinds) != len(set(surfaces)):
         raise AnatomyError("invalid-option", f"surfaces must be a non-empty subset of {', '.join(SURFACE_KINDS)}")
     files, used_atlases = _source_files(subject, kinds, atlases)
+    verify_subject_source_provenance(root, subject, list(files.values()))
     sources = {role: (subject.relative(path), path.stat().st_size, sha256_file(path)) for role, path in files.items()}
     asset_id = _asset_id(subject, sources)
     store = AssetStore(root)
@@ -182,9 +190,13 @@ def prepare_asset(
         read_surface(files[f"surf.{hemi}.{kind}"], hemi, kind) for hemi in HEMISPHERES for kind in kinds  # type: ignore[arg-type]
     ]
     for hemi in HEMISPHERES:
-        counts = {m.vertex_count for m in meshes if m.hemisphere == hemi}
+        hemisphere_meshes = [m for m in meshes if m.hemisphere == hemi]
+        counts = {m.vertex_count for m in hemisphere_meshes}
         if len(counts) != 1:
             raise AnatomyError("invalid-surface", f"{hemi} surfaces have different vertex counts; vertices must correspond")
+        reference_faces = hemisphere_meshes[0].faces
+        if any(not np.array_equal(mesh.faces, reference_faces) for mesh in hemisphere_meshes[1:]):
+            raise AnatomyError("invalid-surface", f"{hemi} surfaces have different face topology; vertices do not correspond")
     vertex_counts = {m.hemisphere: m.vertex_count for m in meshes}
     parcellations: list[Parcellation] = [
         read_parcellation(files[f"annot.{hemi}.{stem}"], stem, hemi, vertex_counts[hemi])  # type: ignore[arg-type]
@@ -194,22 +206,21 @@ def prepare_asset(
     transforms = _transforms(subject, meshes, files.get("mri.orig"))
 
     root.prepare_for_writing()
-    store.path.mkdir(parents=True, exist_ok=True)
-    staging = store.path / f".staging-{asset_id}-{os.getpid()}"
-    shutil.rmtree(staging, ignore_errors=True)
-    staging.mkdir()
+    private_mkdir(store.path)
+    staging = Path(tempfile.mkdtemp(prefix=f".staging-{asset_id}-", dir=store.path))
     try:
         surface_docs = []
         for mesh in meshes:
             stem = f"{mesh.hemisphere}.{mesh.kind}"
-            lo, hi = mesh.bounds()
+            serialized_positions = np.asarray(mesh.vertices, dtype=np.float32)
+            lo, hi = serialized_positions.min(axis=0), serialized_positions.max(axis=0)
             surface_docs.append(
                 contract.SurfaceMesh(
                     hemisphere=mesh.hemisphere,
                     surface=mesh.kind,
                     vertex_count=mesh.vertex_count,
                     triangle_count=mesh.triangle_count,
-                    positions=_buffer(staging, f"{stem}.positions.f32", mesh.vertices, "float32"),
+                    positions=_buffer(staging, f"{stem}.positions.f32", serialized_positions, "float32"),
                     indices=_buffer(staging, f"{stem}.indices.u32", mesh.faces, "uint32"),
                     bounds_mm=contract.Bounds(min=[float(v) for v in lo], max=[float(v) for v in hi]),
                 )
@@ -299,6 +310,8 @@ class AssetStore:
         path = self.directory(asset_id) / MANIFEST
         if not path.is_file():
             raise AnatomyError("unknown-asset", f"no asset {asset_id}")
+        if path.stat().st_size > MAX_MANIFEST_BYTES:
+            raise AnatomyError("invalid-manifest", f"asset {asset_id}: manifest exceeds {MAX_MANIFEST_BYTES} bytes")
         return path.read_bytes()
 
     def manifest(self, asset_id: str) -> contract.AnatomyAsset:
@@ -319,13 +332,52 @@ class AssetStore:
         path = (directory / file_name).resolve()
         if path.parent != directory or not path.is_file():
             raise AnatomyError("unknown-file", f"{file_name} is not part of asset {asset_id}")
+        ref = next(
+            (
+                candidate
+                for candidate in [
+                    *(surface.positions for surface in asset.surfaces),
+                    *(surface.indices for surface in asset.surfaces),
+                    *(parcellation.vertex_labels for parcellation in asset.parcellations),
+                ]
+                if candidate.file == file_name
+            ),
+            None,
+        )
+        if ref is None or path.stat().st_size != ref.byte_length or sha256_file(path) != ref.sha256:
+            raise AnatomyError("corrupt-asset", f"{file_name} does not match the manifest; prepare the asset again")
         return path
 
     def _read_buffer(self, asset_id: str, ref: contract.BufferRef) -> NDArray:
-        data = self.buffer_path(asset_id, ref.file).read_bytes()
+        data = self.buffer_bytes(asset_id, ref.file)
         if len(data) != ref.byte_length or hashlib.sha256(data).hexdigest() != ref.sha256:
             raise AnatomyError("corrupt-asset", f"{ref.file} does not match the manifest; prepare the asset again")
         return np.frombuffer(data, dtype=np.dtype(ref.dtype).newbyteorder("<"))
+
+    def buffer_bytes(self, asset_id: str, file_name: str) -> bytes:
+        """Read one listed buffer snapshot and verify it before returning any bytes."""
+        problems = self.verify(asset_id)
+        if problems:
+            raise AnatomyError("corrupt-asset", f"asset {asset_id} failed verification ({problems[0]})")
+        asset = self.manifest(asset_id)
+        ref = next(
+            (
+                candidate
+                for candidate in [
+                    *(surface.positions for surface in asset.surfaces),
+                    *(surface.indices for surface in asset.surfaces),
+                    *(parcellation.vertex_labels for parcellation in asset.parcellations),
+                ]
+                if candidate.file == file_name
+            ),
+            None,
+        )
+        if ref is None:
+            raise AnatomyError("unknown-file", f"{file_name} is not part of asset {asset_id}")
+        data = self.buffer_path(asset_id, file_name).read_bytes()
+        if len(data) != ref.byte_length or hashlib.sha256(data).hexdigest() != ref.sha256:
+            raise AnatomyError("corrupt-asset", f"{file_name} does not match the manifest; prepare the asset again")
+        return data
 
     def load_mesh(self, asset_id: str, hemisphere: str, surface: str) -> tuple[NDArray[np.float32], NDArray[np.uint32]]:
         """Verified (N x 3 positions in surface RAS mm, M x 3 triangle indices)."""
@@ -348,14 +400,21 @@ class AssetStore:
             if not entry.is_dir() or not _ASSET_DIR.match(entry.name) or not (entry / MANIFEST).is_file():
                 continue
             try:
-                valid.append(self.manifest(entry.name))
+                asset = self.manifest(entry.name)
+                verification = self.verify(entry.name)
+                if verification:
+                    problems.append(f"asset {entry.name}: {verification[0]}")
+                    continue
+                valid.append(asset)
             except AnatomyError as exc:
                 problems.append(exc.message)
         valid.sort(key=lambda a: (a.subject.dataset_id, a.subject.subject_id, a.provenance.prepared_at_utc))
         return valid, problems
 
     def catalog(self) -> contract.AnatomyCatalog:
-        assets, _ = self.assets()
+        assets, problems = self.assets()
+        if problems and not assets:
+            raise AnatomyError("corrupt-asset", f"no valid anatomy assets ({problems[0]})")
         templates = [a for a in assets if a.anatomy_kind == "template"]
         default = (templates or assets)[-1].asset_id if assets else None
         return contract.AnatomyCatalog(
@@ -407,8 +466,20 @@ class AssetStore:
                 positions.max(axis=0) > np.array(s.bounds_mm.max) + contract.BOUNDS_TOLERANCE_MM
             ):
                 problems.append(f"{s.hemisphere}.{s.surface}: positions exceed boundsMm")
+            elif not np.allclose(
+                positions.min(axis=0), s.bounds_mm.min, atol=contract.BOUNDS_TOLERANCE_MM, rtol=0
+            ) or not np.allclose(
+                positions.max(axis=0), s.bounds_mm.max, atol=contract.BOUNDS_TOLERANCE_MM, rtol=0
+            ):
+                problems.append(f"{s.hemisphere}.{s.surface}: boundsMm do not match position extrema")
             if indices.size and int(indices.max()) >= s.vertex_count:
                 problems.append(f"{s.hemisphere}.{s.surface}: triangle index out of range")
+        for hemisphere in HEMISPHERES:
+            meshes = [surface for surface in asset.surfaces if surface.hemisphere == hemisphere]
+            if meshes:
+                reference = arrays[meshes[0].indices.file]
+                if any(not np.array_equal(arrays[mesh.indices.file], reference) for mesh in meshes[1:]):
+                    problems.append(f"{hemisphere}: surface face topology differs")
         for p in asset.parcellations:
             labels = arrays[p.vertex_labels.file]
             allowed = np.array(sorted({lab.index for lab in p.labels} | {-1}), dtype=np.int64)

@@ -4,7 +4,7 @@ import json
 from pathlib import Path
 
 import pytest
-from anatomy_fixtures import write_freesurfer_subject, write_t1
+from anatomy_fixtures import record_dataset_files, write_freesurfer_subject, write_t1
 
 from neuro_engine.cli import main
 from neuro_engine.datasets.catalog import get_dataset
@@ -19,7 +19,9 @@ def run(capsys: pytest.CaptureFixture[str], *args: str) -> tuple[int, str, str]:
 def test_datasets_list_and_info(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
     code, out, _ = run(capsys, "--data-dir", str(tmp_path), "--json", "datasets", "list")
     assert code == 0
-    assert [d["id"] for d in json.loads(out)["datasets"]] == ["fsaverage", "ds000248", "ixi", "local"]
+    document = json.loads(out)
+    assert document["dataRoot"] == "private-local" and str(tmp_path) not in out
+    assert [d["id"] for d in document["datasets"]] == ["fsaverage", "ds000248", "ixi", "local"]
     code, out, _ = run(capsys, "--data-dir", str(tmp_path), "datasets", "info", "ds000248")
     assert code == 0 and "CC0" in out and "1.5 T" in out and "10.18112/openneuro.ds000248.v1.2.4" in out
 
@@ -46,8 +48,29 @@ def test_check_mri(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
 
 def test_import_prepare_list_info_verify(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
     data = ["--data-dir", str(tmp_path / "data")]
+    t1 = write_t1(tmp_path / "t1.nii.gz")
     recon = write_freesurfer_subject(tmp_path / "recon")
-    assert run(capsys, *data, "datasets", "import-freesurfer", str(recon), "--label", "me")[0] == 0
+    assert run(capsys, *data, "datasets", "import-mri", str(t1), "--label", "me")[0] == 0
+    assert (
+        run(
+            capsys,
+            *data,
+            "datasets",
+            "import-freesurfer",
+            str(recon),
+            "--label",
+            "me",
+            "--tool",
+            "FreeSurfer",
+            "--tool-version",
+            "test",
+            "--command-summary",
+            "recon-all test",
+            "--qc-status",
+            "passed",
+        )[0]
+        == 0
+    )
     code, out, _ = run(capsys, *data, "--json", "datasets", "subjects")
     assert code == 0 and json.loads(out)["subjects"][0]["key"] == "local/me"
     assert run(capsys, *data, "datasets", "check-subject", "local/me")[0] == 0
@@ -83,6 +106,10 @@ def test_validate_detects_modified_raw_files(tmp_path: Path, capsys: pytest.Capt
 
 def test_prepare_without_surfaces_explains_reconstruction(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
     data = tmp_path / "data"
-    write_t1(data / "raw" / "ixi" / get_dataset("ixi").version / "IXI012-HH-1211-T1.nii.gz")
+    root_file = data / "raw" / "ixi" / get_dataset("ixi").version / "IXI012-HH-1211-T1.nii.gz"
+    write_t1(root_file)
+    from neuro_engine.datasets.storage import DataRoot
+
+    record_dataset_files(DataRoot(data), "ixi")
     code, _, err = run(capsys, "--data-dir", str(data), "anatomy", "prepare", "ixi/IXI012-HH-1211")
     assert code == 1 and "no-surfaces" in err and "recon-all" in err

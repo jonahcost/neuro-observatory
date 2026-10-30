@@ -58,6 +58,7 @@ export interface AnatomyClientOptions {
 }
 
 const LITTLE_ENDIAN = new Uint8Array(new Uint16Array([1]).buffer)[0] === 1;
+const MAX_JSON_RESPONSE_BYTES = 8_000_000;
 
 async function webCryptoSha256(data: ArrayBuffer): Promise<string> {
   const subtle = globalThis.crypto?.subtle;
@@ -109,20 +110,79 @@ export function createAnatomyClient(options: AnatomyClientOptions = {}): Anatomy
   async function readText(path: string, signal: AbortSignal | undefined): Promise<string> {
     const response = await request(path, signal, 'no-cache');
     try {
-      return await response.text();
-    } catch {
+      return new TextDecoder().decode(await boundedArrayBuffer(response, MAX_JSON_RESPONSE_BYTES, path, signal));
+    } catch (error) {
+      if (error instanceof AnatomyLoadError) {
+        throw error;
+      }
       throw new AnatomyLoadError(signal?.aborted ? 'aborted' : 'network', 'response interrupted');
     }
   }
 
-  async function readBuffer(asset: AnatomyAsset, ref: BufferRef, signal: AbortSignal | undefined): Promise<ArrayBuffer> {
+  async function boundedArrayBuffer(
+    response: Response,
+    expectedBytes: number,
+    file: string,
+    signal: AbortSignal | undefined,
+  ): Promise<ArrayBuffer> {
+    const declared = response.headers.get('content-length');
+    if (declared !== null && (!/^[0-9]+$/.test(declared) || Number(declared) > expectedBytes)) {
+      await response.body?.cancel();
+      throw new AnatomyLoadError('integrity', `${file}: response exceeds the manifest byteLength`);
+    }
+    if (!response.body) {
+      const fallback = await response.arrayBuffer();
+      if (fallback.byteLength > expectedBytes) {
+        throw new AnatomyLoadError('integrity', `${file}: response exceeds the manifest byteLength`);
+      }
+      return fallback;
+    }
+    const reader = response.body.getReader();
+    const chunks: Uint8Array[] = [];
+    let total = 0;
+    try {
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) {
+          break;
+        }
+        total += value.byteLength;
+        if (total > expectedBytes) {
+          await reader.cancel();
+          throw new AnatomyLoadError('integrity', `${file}: response exceeds the manifest byteLength`);
+        }
+        chunks.push(value);
+      }
+    } catch (error) {
+      if (error instanceof AnatomyLoadError) {
+        throw error;
+      }
+      throw new AnatomyLoadError(signal?.aborted ? 'aborted' : 'network', `${file}: download interrupted`);
+    }
+    const combined = new Uint8Array(total);
+    let offset = 0;
+    for (const chunk of chunks) {
+      combined.set(chunk, offset);
+      offset += chunk.byteLength;
+    }
+    return combined.buffer;
+  }
+
+  async function readBufferOnce(
+    asset: AnatomyAsset,
+    ref: BufferRef,
+    signal: AbortSignal | undefined,
+    cache: RequestCache,
+  ): Promise<ArrayBuffer> {
     const path = `/assets/${encodeURIComponent(asset.assetId)}/files/${encodeURIComponent(ref.file)}`;
-    // Buffers are immutable per asset ID, so the HTTP cache may serve them.
-    const response = await request(path, signal, 'default');
+    const response = await request(path, signal, cache);
     let data: ArrayBuffer;
     try {
-      data = await response.arrayBuffer();
-    } catch {
+      data = await boundedArrayBuffer(response, ref.byteLength, ref.file, signal);
+    } catch (error) {
+      if (error instanceof AnatomyLoadError) {
+        throw error;
+      }
       throw new AnatomyLoadError(signal?.aborted ? 'aborted' : 'network', `${ref.file}: download interrupted`);
     }
     if (data.byteLength !== ref.byteLength) {
@@ -132,6 +192,34 @@ export function createAnatomyClient(options: AnatomyClientOptions = {}): Anatomy
       throw new AnatomyLoadError('integrity', `${ref.file}: SHA-256 does not match the manifest`);
     }
     return data;
+  }
+
+  async function readBuffer(asset: AnatomyAsset, ref: BufferRef, signal: AbortSignal | undefined): Promise<ArrayBuffer> {
+    try {
+      return await readBufferOnce(asset, ref, signal, 'default');
+    } catch (error) {
+      if (!(error instanceof AnatomyLoadError) || error.kind !== 'integrity' || signal?.aborted) {
+        throw error;
+      }
+      return readBufferOnce(asset, ref, signal, 'reload');
+    }
+  }
+
+  async function abortSiblings<T>(signal: AbortSignal | undefined, load: (signal: AbortSignal) => Promise<T>): Promise<T> {
+    const controller = new AbortController();
+    const abort = () => controller.abort();
+    signal?.addEventListener('abort', abort, { once: true });
+    if (signal?.aborted) {
+      controller.abort();
+    }
+    try {
+      return await load(controller.signal);
+    } catch (error) {
+      controller.abort();
+      throw error;
+    } finally {
+      signal?.removeEventListener('abort', abort);
+    }
   }
 
   function requireLittleEndian(): void {
@@ -166,11 +254,11 @@ export function createAnatomyClient(options: AnatomyClientOptions = {}): Anatomy
       if (meshes.length === 0) {
         throw new AnatomyLoadError('contract', `asset ${asset.assetId} has no ${surface} surface`);
       }
-      return Promise.all(
-        meshes.map(async (mesh) => {
+      return abortSiblings(signal, (childSignal) =>
+        Promise.all(meshes.map(async (mesh) => {
           const [positionData, indexData] = await Promise.all([
-            readBuffer(asset, mesh.positions, signal),
-            readBuffer(asset, mesh.indices, signal),
+            readBuffer(asset, mesh.positions, childSignal),
+            readBuffer(asset, mesh.indices, childSignal),
           ]);
           const positions = new Float32Array(positionData);
           const indices = new Uint32Array(indexData);
@@ -179,7 +267,7 @@ export function createAnatomyClient(options: AnatomyClientOptions = {}): Anatomy
             throw new AnatomyLoadError('integrity', `${mesh.hemisphere}.${mesh.surface}: ${issue}`);
           }
           return { hemisphere: mesh.hemisphere, surface: mesh.surface, positions, indices, boundsMm: mesh.boundsMm };
-        }),
+        })),
       );
     },
 
@@ -189,9 +277,9 @@ export function createAnatomyClient(options: AnatomyClientOptions = {}): Anatomy
       if (parcellations.length === 0) {
         throw new AnatomyLoadError('contract', `asset ${asset.assetId} has no ${atlas} atlas`);
       }
-      return Promise.all(
-        parcellations.map(async (parcellation) => {
-          const vertexLabels = new Int32Array(await readBuffer(asset, parcellation.vertexLabels, signal));
+      return abortSiblings(signal, (childSignal) =>
+        Promise.all(parcellations.map(async (parcellation) => {
+          const vertexLabels = new Int32Array(await readBuffer(asset, parcellation.vertexLabels, childSignal));
           const issue = vertexLabelsIssue(parcellation, vertexLabels);
           if (issue) {
             throw new AnatomyLoadError('integrity', `${parcellation.hemisphere}.${atlas}: ${issue}`);
@@ -203,7 +291,7 @@ export function createAnatomyClient(options: AnatomyClientOptions = {}): Anatomy
             labels: parcellation.labels,
             vertexLabels,
           };
-        }),
+        })),
       );
     },
   };

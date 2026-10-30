@@ -13,23 +13,18 @@ function HemisphereMesh({
   offsetMm: number;
   parcellation: LoadedParcellation | undefined;
 }) {
+  const colored = parcellation !== undefined && parcellation.vertexLabels.length === surface.positions.length / 3;
   const geometry = useMemo(() => {
     const g = new BufferGeometry();
     g.setAttribute('position', new BufferAttribute(surface.positions, 3));
     g.setIndex(new BufferAttribute(surface.indices, 1));
+    if (colored && parcellation) {
+      g.setAttribute('color', new BufferAttribute(parcellationColors(parcellation), 3));
+    }
     g.computeVertexNormals();
     g.computeBoundingSphere();
     return g;
-  }, [surface]);
-
-  const colored = parcellation !== undefined && parcellation.vertexLabels.length === surface.positions.length / 3;
-  useEffect(() => {
-    if (colored) {
-      geometry.setAttribute('color', new BufferAttribute(parcellationColors(parcellation), 3));
-    } else {
-      geometry.deleteAttribute('color');
-    }
-  }, [geometry, parcellation, colored]);
+  }, [surface, parcellation, colored]);
 
   useEffect(() => () => geometry.dispose(), [geometry]);
 

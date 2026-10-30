@@ -170,3 +170,50 @@ def tar_bytes(members: list[tuple[str, bytes]]) -> bytes:
             info.mtime = 0
             tar.addfile(info, io.BytesIO(data))
     return buffer.getvalue()
+
+
+def record_dataset_files(root, dataset_id: str) -> None:  # type: ignore[no-untyped-def]
+    """Create/update synthetic acquisition provenance for every current raw test file."""
+    from neuro_engine.datasets.catalog import get_dataset
+    from neuro_engine.datasets.integrity import sha256_file
+    from neuro_engine.datasets.provenance import (
+        AcquiredFile,
+        new_record,
+        read_record,
+        write_record,
+    )
+
+    spec = get_dataset(dataset_id)
+    base = root.raw(spec.id, spec.version)
+    record = read_record(root, spec.id, spec.version) or new_record(spec)
+    record.upsert_files(
+        [
+            AcquiredFile(
+                path=path.relative_to(base).as_posix(),
+                bytes=path.stat().st_size,
+                sha256=sha256_file(path),
+            )
+            for path in sorted(base.rglob("*"))
+            if path.is_file()
+        ]
+    )
+    write_record(root, record)
+
+
+def record_local_reconstruction(root, label: str = "me") -> None:  # type: ignore[no-untyped-def]
+    """Record synthetic local acquisition and passed reconstruction QC."""
+    from neuro_engine.datasets.reconstruction import write_reconstruction_record
+    from neuro_engine.datasets.subjects import resolve_subject
+
+    t1 = root.raw("local", "1") / "mri" / label / "T1w.nii.gz"
+    if not t1.is_file():
+        write_t1(t1)
+    record_dataset_files(root, "local")
+    write_reconstruction_record(
+        root,
+        resolve_subject(root, f"local/{label}"),
+        tool_name="synthetic-test",
+        tool_version="1",
+        command_summary="synthetic test reconstruction",
+        qc_status="passed",
+    )

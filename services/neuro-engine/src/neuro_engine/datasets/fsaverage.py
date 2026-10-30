@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import os
+import shutil
+import tempfile
 from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from pathlib import Path
@@ -19,7 +21,7 @@ from neuro_engine.datasets.provenance import (
     utc_now,
     write_record,
 )
-from neuro_engine.datasets.storage import DataRoot
+from neuro_engine.datasets.storage import DataRoot, private_mkdir
 
 # Files the anatomy pipeline reads; their hashes are recorded after MNE has verified the archives.
 FSAVERAGE_ANATOMY_FILES = tuple(
@@ -77,26 +79,56 @@ def fetch_fsaverage(root: DataRoot, *, accept_license: bool, fetch: FetchFunctio
         )
     root.prepare_for_writing()
     subjects_dir = root.raw(spec.id, spec.version)
-    subjects_dir.mkdir(parents=True, exist_ok=True)
-    with _subjects_dir_env(subjects_dir):
-        try:
-            fs_dir = fetch(subjects_dir)
-        except DatasetError:
-            raise
-        except Exception as exc:  # MNE/pooch raise many types for network and hash failures
-            raise DatasetError(
-                "fetch-failed",
-                f"MNE could not fetch fsaverage ({type(exc).__name__})",
-                "check the network connection and retry; MNE verifies the archive hashes",
-            ) from exc
-    if fs_dir.resolve() != (subjects_dir / "fsaverage").resolve():
-        raise DatasetError("unexpected-layout", "MNE returned fsaverage outside the requested subjects directory")
-    missing = [p for p in FSAVERAGE_ANATOMY_FILES if not (subjects_dir / p).is_file()]
-    if missing:
+    final = subjects_dir / "fsaverage"
+    expected_final = [subjects_dir / path for path in FSAVERAGE_ANATOMY_FILES]
+    record = read_record(root, spec.id, spec.version)
+    if final.is_symlink():
+        raise DatasetError("unsafe-path", "refusing symlinked fsaverage directory")
+    if final.is_dir() and all(path.is_file() for path in expected_final) and record is not None:
+        recorded = record.file_index()
+        for relative, path in zip(FSAVERAGE_ANATOMY_FILES, expected_final, strict=True):
+            entry = recorded.get(relative)
+            if entry is None or entry.bytes != path.stat().st_size or entry.sha256 != sha256_file(path):
+                raise DatasetError(
+                    "existing-file-mismatch",
+                    f"fsaverage/{relative} does not match acquisition provenance",
+                    "move the damaged dataset aside and fetch it again",
+                )
+            if os.name == "posix":
+                path.chmod(0o600)
+        return final
+    if final.exists():
         raise DatasetError(
-            "incomplete-dataset", f"fsaverage is missing {len(missing)} expected files (first: {missing[0]})", "retry the fetch"
+            "incomplete-dataset",
+            "an incomplete fsaverage directory already exists",
+            "move it aside and fetch again; partial fetches are never treated as subjects",
         )
-    record = read_record(root, spec.id, spec.version) or new_record(
+    private_mkdir(root.downloads(spec.id, spec.version))
+    staging = Path(tempfile.mkdtemp(prefix=".fsaverage-stage-", dir=root.downloads(spec.id, spec.version)))
+    try:
+        with _subjects_dir_env(staging):
+            try:
+                fs_dir = fetch(staging)
+            except DatasetError:
+                raise
+            except Exception as exc:  # MNE/pooch raise many types for network and hash failures
+                raise DatasetError(
+                    "fetch-failed",
+                    f"MNE could not fetch fsaverage ({type(exc).__name__})",
+                    "check the network connection and retry; MNE verifies the archive hashes",
+                ) from exc
+        if fs_dir.resolve() != (staging / "fsaverage").resolve():
+            raise DatasetError("unexpected-layout", "MNE returned fsaverage outside the requested subjects directory")
+        missing = [p for p in FSAVERAGE_ANATOMY_FILES if not (staging / p).is_file()]
+        if missing:
+            raise DatasetError(
+                "incomplete-dataset", f"fsaverage is missing {len(missing)} expected files (first: {missing[0]})", "retry the fetch"
+            )
+        private_mkdir(subjects_dir)
+        fs_dir.rename(final)
+    finally:
+        shutil.rmtree(staging, ignore_errors=True)
+    record = record or new_record(
         spec, tools=[ToolVersion(name="neuro-engine", version=__version__), ToolVersion(name="mne", version=_mne_version())]
     )
     record.license_accepted_at_utc = record.license_accepted_at_utc or utc_now()
@@ -107,4 +139,4 @@ def fetch_fsaverage(root: DataRoot, *, accept_license: bool, fetch: FetchFunctio
         ]
     )
     write_record(root, record)
-    return fs_dir
+    return final

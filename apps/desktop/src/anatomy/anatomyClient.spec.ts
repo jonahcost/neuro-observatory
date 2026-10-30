@@ -110,6 +110,68 @@ describe('anatomy client', () => {
     expect((await rejection(client.fetchCatalog(controller.signal))).kind).toBe('aborted');
   });
 
+  it('classifies oversized JSON as integrity failure', async () => {
+    const client = createAnatomyClient({
+      baseUrl: BASE,
+      fetchImpl: (() =>
+        Promise.resolve(new Response('{}', { headers: { 'content-length': '9000000' } }))) as typeof fetch,
+      sha256,
+    });
+    const error = await rejection(client.fetchCatalog());
+    expect(error.kind).toBe('integrity');
+    expect(error.message).toContain('exceeds');
+  });
+
+  it('retries stale immutable buffers once with cache reload', async () => {
+    const { template, engine } = setup();
+    const caches: Array<RequestCache | undefined> = [];
+    let attempts = 0;
+    const file = '/assets/fsaverage-0001/files/lh.pial.positions.f32';
+    const fetchImpl = (async (input: RequestInfo | URL, init?: RequestInit) => {
+      const path = String(input).slice(BASE.length);
+      if (path === file) {
+        caches.push(init?.cache);
+        attempts += 1;
+        if (attempts === 1) {
+          return new Response(new Uint8Array(template.files.get('lh.pial.positions.f32') ?? []).fill(0xff));
+        }
+      }
+      return engine.fetchImpl(input, init);
+    }) as typeof fetch;
+    const client = createAnatomyClient({ baseUrl: BASE, fetchImpl, sha256 });
+    await client.loadSurfaces(template.asset, 'pial');
+    expect(caches).toEqual(['default', 'reload']);
+  });
+
+  it('aborts sibling buffer requests after an integrity failure', async () => {
+    const { template, engine } = setup();
+    let siblingAborted = false;
+    const broken = '/assets/fsaverage-0001/files/lh.pial.positions.f32';
+    const delayed = '/assets/fsaverage-0001/files/rh.pial.positions.f32';
+    const fetchImpl = (async (input: RequestInfo | URL, init?: RequestInit) => {
+      const path = String(input).slice(BASE.length);
+      if (path === broken) {
+        return new Response(new Uint8Array(template.files.get('lh.pial.positions.f32') ?? []).fill(0xff));
+      }
+      if (path === delayed) {
+        return new Promise<Response>((_resolve, reject) => {
+          init?.signal?.addEventListener(
+            'abort',
+            () => {
+              siblingAborted = true;
+              reject(new DOMException('aborted', 'AbortError'));
+            },
+            { once: true },
+          );
+        });
+      }
+      return engine.fetchImpl(input, init);
+    }) as typeof fetch;
+    const client = createAnatomyClient({ baseUrl: BASE, fetchImpl, sha256 });
+    expect((await rejection(client.loadSurfaces(template.asset, 'pial'))).kind).toBe('integrity');
+    expect(siblingAborted).toBe(true);
+  });
+
   it('reads the API URL from the environment', () => {
     expect(anatomyApiUrlFromEnv({ VITE_NEURO_ENGINE_ANATOMY_URL: 'http://127.0.0.1:9000/x' })).toBe('http://127.0.0.1:9000/x');
     expect(anatomyApiUrlFromEnv({})).toBeUndefined();

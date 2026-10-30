@@ -58,6 +58,28 @@ def test_existing_mismatching_file_is_never_overwritten(tmp_path: Path) -> None:
     assert destination.read_bytes() == b"x" * len(BODY)
 
 
+def test_symlinked_storage_parent_is_rejected(tmp_path: Path) -> None:
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    (tmp_path / "downloads").symlink_to(outside, target_is_directory=True)
+    with pytest.raises(DatasetError) as info:
+        fetch(target(tmp_path), allowed=ALLOWED, opener=FakeServer({URL: BODY}))
+    assert info.value.code == "unsafe-path"
+    assert list(outside.iterdir()) == []
+
+
+def test_symlinked_destination_is_rejected_without_touching_target(tmp_path: Path) -> None:
+    outside = tmp_path / "outside.bin"
+    outside.write_bytes(BODY)
+    item = target(tmp_path)
+    item.destination.parent.mkdir(parents=True)
+    item.destination.symlink_to(outside)
+    with pytest.raises(DatasetError) as info:
+        fetch(item, allowed=ALLOWED, opener=FakeServer({URL: BODY}))
+    assert info.value.code == "unsafe-path"
+    assert outside.read_bytes() == BODY
+
+
 def test_interrupted_download_resumes_with_range(tmp_path: Path) -> None:
     server = FakeServer({URL: BODY}, fail_after=3000)
     with pytest.raises(DatasetError) as info:
@@ -87,6 +109,17 @@ def test_checksum_mismatch_discards_the_partial(tmp_path: Path) -> None:
     assert not (tmp_path / "raw" / "file.bin").exists()
 
 
+def test_content_validation_happens_before_publication(tmp_path: Path) -> None:
+    def reject(_path: Path) -> None:
+        raise DatasetError("invalid-content", "synthetic rejection")
+
+    item = target(tmp_path)
+    with pytest.raises(DatasetError) as info:
+        fetch(item, allowed=ALLOWED, opener=FakeServer({URL: BODY}), validate=reject)
+    assert info.value.code == "invalid-content"
+    assert not item.destination.exists() and not item.partial.exists()
+
+
 def test_oversized_response_is_rejected(tmp_path: Path) -> None:
     with pytest.raises(DatasetError) as info:
         fetch(target(tmp_path, size=100, checksum=False), allowed=ALLOWED, opener=FakeServer({URL: BODY}))
@@ -102,12 +135,32 @@ def test_http_errors_are_actionable(tmp_path: Path) -> None:
 
 @pytest.mark.parametrize(
     "url",
-    ["http://example.org/data/file.bin", "https://evil.example/data/file.bin", "https://example.org/other/file.bin", "file:///etc/passwd"],
+    [
+        "http://example.org/data/file.bin",
+        "https://evil.example/data/file.bin",
+        "https://example.org/other/file.bin",
+        "https://example.org/data.evil/file.bin",
+        "file:///etc/passwd",
+    ],
 )
 def test_only_allowed_https_prefixes(url: str) -> None:
     with pytest.raises(DatasetError) as info:
         check_url_allowed(url, ALLOWED)
     assert info.value.code == "disallowed-url"
+
+
+def test_injected_opener_final_redirect_url_is_revalidated(tmp_path: Path) -> None:
+    server = FakeServer({URL: BODY})
+
+    def redirected(request, timeout):  # type: ignore[no-untyped-def]
+        response = server(request, timeout)
+        response.url = "https://evil.example/stolen.bin"
+        return response
+
+    with pytest.raises(DatasetError) as info:
+        fetch(target(tmp_path), allowed=ALLOWED, opener=redirected)
+    assert info.value.code == "disallowed-url"
+    assert not target(tmp_path).destination.exists()
 
 
 def test_member_slice_downloads_only_its_bytes(tmp_path: Path) -> None:

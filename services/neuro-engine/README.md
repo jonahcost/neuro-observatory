@@ -111,9 +111,11 @@ CORS on these routes: GET only, origins from `NEURO_ENGINE_ALLOWED_ORIGINS`. MRI
 - **Your own MRI** (anatomy kind `personal`, stored under `raw/local/1/`, never committed):
   1. `datasets import-mri <T1.nii.gz> --label me --field-strength 3 --sequence MPRAGE --scanner "<model>"` (a pseudonymous label; facts are recorded as `user-declared`; the original path is not recorded).
   2. `anatomy check-mri` on the imported file, then reconstruct it outside the engine (see the pipeline README).
-  3. `datasets import-freesurfer <SUBJECTS_DIR>/<subject> --label me`, then `anatomy prepare local/me`.
+  3. After visual QC, `datasets import-freesurfer <SUBJECTS_DIR>/<subject> --label me --tool FreeSurfer --tool-version <version> --command-summary "<privacy-safe configuration>" --qc-status passed`, then `anatomy prepare local/me`.
 
   Personal MRI-derived meshes are restricted data: they stay in the data root and are served only on loopback.
+
+NIfTI spatial units must be declared as millimetres. For a documented legacy file with unset units, add `--assume-mm` to `check-mri`, `import-mri`, or IXI import/fetch; the assumption is explicit and retained in acquisition provenance.
 
 ### Tests
 

@@ -6,7 +6,7 @@ from pathlib import Path
 
 import nibabel as nib
 import pytest
-from anatomy_fixtures import write_freesurfer_subject, write_t1
+from anatomy_fixtures import record_dataset_files, write_freesurfer_subject, write_t1
 
 from neuro_engine.datasets.catalog import get_dataset
 from neuro_engine.datasets.errors import DatasetError
@@ -48,6 +48,8 @@ def test_subjects_are_discovered_across_datasets(tmp_path: Path) -> None:
     write_freesurfer_subject(root.raw("fsaverage", get_dataset("fsaverage").version) / "fsaverage")
     write_ds000248(root)
     write_t1(root.raw("ixi", get_dataset("ixi").version) / "IXI012-HH-1211-T1.nii.gz")
+    for dataset_id in ("fsaverage", "ds000248", "ixi"):
+        record_dataset_files(root, dataset_id)
     keys = {s.key: s for s in list_subjects(root)}
     assert list(keys) == ["fsaverage", "ds000248/sub-01", "ixi/IXI012-HH-1211"]
     assert keys["fsaverage"].spec.anatomy_kind == "template" and keys["fsaverage"].has_surfaces
@@ -65,6 +67,7 @@ def test_subjects_are_discovered_across_datasets(tmp_path: Path) -> None:
 def test_ds000248_consistency_checks_pass(tmp_path: Path) -> None:
     root = DataRoot(tmp_path)
     write_ds000248(root)
+    record_dataset_files(root, "ds000248")
     findings = check_subject(resolve_subject(root, "ds000248/sub-01"))
     assert not [f for f in findings if f.level == "error"]
     assert {"rawavg-matches-t1", "landmarks", "eeg-recording"} <= codes(findings)
@@ -77,6 +80,7 @@ def test_ds000248_inconsistencies_are_reported(tmp_path: Path) -> None:
     base = write_ds000248(root, rawavg_matches=False, landmark=[500, 0, 0])
     (base / "participants.tsv").write_text("participant_id\nsub-02\n")
     (base / "sub-01" / "anat" / "stray.txt").write_text("x")
+    record_dataset_files(root, "ds000248")
     findings = check_subject(resolve_subject(root, "ds000248/sub-01"))
     assert {"rawavg-differs", "landmark-outside-volume", "not-in-participants", "bids-entity-mismatch"} <= codes(findings)
 
@@ -84,6 +88,7 @@ def test_ds000248_inconsistencies_are_reported(tmp_path: Path) -> None:
 def test_subject_without_reconstruction_is_flagged(tmp_path: Path) -> None:
     root = DataRoot(tmp_path)
     write_t1(root.raw("ixi", get_dataset("ixi").version) / "IXI012-HH-1211-T1.nii.gz")
+    record_dataset_files(root, "ixi")
     findings = check_subject(resolve_subject(root, "ixi/IXI012-HH-1211"))
     assert "no-reconstruction" in codes(findings)
 
@@ -95,7 +100,15 @@ def test_local_import_of_t1_and_freesurfer(tmp_path: Path) -> None:
     import_mri(root, private, "me", field_strength_tesla=3.0, sequence="MPRAGE", scanner="Siemens Prisma")
     fs_source = write_freesurfer_subject(tmp_path / "recon" / "jane")
     (fs_source / "mri" / "brainmask.mgz").write_bytes(b"not copied")
-    import_freesurfer(root, fs_source, "me")
+    import_freesurfer(
+        root,
+        fs_source,
+        "me",
+        tool_name="FreeSurfer",
+        tool_version="test",
+        command_summary="recon-all test",
+        qc_status="passed",
+    )
 
     subject = resolve_subject(root, "local/me")
     assert subject.spec.anatomy_kind == "personal"
@@ -131,14 +144,50 @@ def test_local_imports_reject_bad_inputs(tmp_path: Path) -> None:
     with pytest.raises(DatasetError) as strength:
         import_mri(root, write_t1(tmp_path / "t1.nii.gz"), "me", field_strength_tesla=0)
     assert strength.value.code == "invalid-field-strength"
+    import_mri(root, write_t1(tmp_path / "source.nii.gz"), "me")
     fs = write_freesurfer_subject(tmp_path / "recon")
     (fs / "surf" / "rh.inflated").unlink()
     with pytest.raises(DatasetError) as incomplete:
-        import_freesurfer(root, fs, "me")
+        import_freesurfer(
+            root,
+            fs,
+            "me",
+            tool_name="FreeSurfer",
+            tool_version="test",
+            command_summary="recon-all test",
+            qc_status="passed",
+        )
     assert incomplete.value.code == "incomplete-freesurfer-subject"
     shutil.rmtree(fs)
     fs = write_freesurfer_subject(tmp_path / "recon")
     (fs / "surf" / "lh.white").write_bytes(b"garbage")
     with pytest.raises(DatasetError) as corrupt:
-        import_freesurfer(root, fs, "me")
+        import_freesurfer(
+            root,
+            fs,
+            "me",
+            tool_name="FreeSurfer",
+            tool_version="test",
+            command_summary="recon-all test",
+            qc_status="passed",
+        )
     assert corrupt.value.code == "invalid-surface"
+
+
+def test_reconstruction_cannot_reseal_a_modified_source_t1(tmp_path: Path) -> None:
+    root = DataRoot(tmp_path / "data")
+    imported = import_mri(root, write_t1(tmp_path / "t1.nii.gz"), "me")
+    imported.write_bytes(imported.read_bytes() + b"\0")
+    source = write_freesurfer_subject(tmp_path / "recon")
+    with pytest.raises(DatasetError) as info:
+        import_freesurfer(
+            root,
+            source,
+            "me",
+            tool_name="FreeSurfer",
+            tool_version="test",
+            command_summary="recon-all test",
+            qc_status="passed",
+        )
+    assert info.value.code == "source-provenance-mismatch"
+    assert not (root.raw("local", "1") / "freesurfer" / "me").exists()

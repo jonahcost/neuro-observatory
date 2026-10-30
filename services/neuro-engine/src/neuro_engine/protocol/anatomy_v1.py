@@ -10,6 +10,7 @@ by the shared fixtures in packages/protocol/fixtures/anatomy-v1/
 from __future__ import annotations
 
 import math
+from datetime import datetime
 from typing import Annotated, Any, Literal
 
 from pydantic import (
@@ -38,6 +39,7 @@ AnatomyText = Annotated[str, StringConstraints(min_length=1, max_length=128)]
 LongText = Annotated[str, StringConstraints(min_length=1, max_length=2000)]
 AnatomySlug = Annotated[str, StringConstraints(pattern=r"^[a-z0-9][a-z0-9.-]{0,63}$")]
 Count = Annotated[int, JsonInteger, Field(ge=0, le=MAX_SAFE_INTEGER)]
+LabelIndex = Annotated[int, JsonInteger, Field(ge=0, le=2_147_483_647)]
 VertexCount = Annotated[int, JsonInteger, Field(ge=4, le=2_000_000)]
 TriangleCount = Annotated[int, JsonInteger, Field(ge=4, le=4_000_000)]
 Vec3 = Annotated[list[float], Field(min_length=3, max_length=3)]
@@ -116,7 +118,7 @@ class SurfaceMesh(_Doc):
 
 
 class ParcellationLabel(_Doc):
-    index: Count
+    index: LabelIndex
     name: AnatomyText
     rgba: Rgba
 
@@ -144,7 +146,10 @@ class ToolVersion(_Doc):
 class AssetProvenance(_Doc):
     pipeline: Literal["neuro-engine.anatomy.prepare"]
     pipeline_version: AnatomyText
-    prepared_at_utc: Annotated[str, StringConstraints(pattern=r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$")]
+    prepared_at_utc: Annotated[
+        str,
+        StringConstraints(pattern=r"^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$"),
+    ]
     tools: Annotated[list[ToolVersion], Field(max_length=16)]
     sources: Annotated[list[SourceFile], Field(min_length=1, max_length=256)]
 
@@ -199,6 +204,23 @@ def _finite(values: list[float]) -> bool:
     return all(math.isfinite(v) for v in values)
 
 
+def _valid_utc_second(value: str) -> bool:
+    try:
+        parsed = datetime.strptime(value, "%Y-%m-%dT%H:%M:%SZ")
+    except ValueError:
+        return False
+    return parsed.strftime("%Y-%m-%dT%H:%M:%SZ") == value
+
+
+def _safe_relative_path(value: str) -> bool:
+    return not any(part in ("", ".", "..") for part in value.split("/"))
+
+
+def _linear_determinant(matrix: list[float]) -> float:
+    a, b, c, _, d, e, f, _, g, h, i, *_ = matrix
+    return a * (e * i - f * h) - b * (d * i - f * g) + c * (d * h - e * g)
+
+
 def _surface_issue(surface: SurfaceMesh, path: str) -> str | None:
     if surface.positions.dtype != "float32":
         return f"{path}/positions/dtype must be float32"
@@ -234,6 +256,18 @@ def _parcellation_issue(parcellation: Parcellation, path: str, vertex_counts: di
 
 
 def _asset_issue(asset: AnatomyAsset) -> str | None:
+    facts = (asset.acquisition.field_strength_tesla, asset.acquisition.sequence, asset.acquisition.scanner)
+    if asset.anatomy_kind == "template":
+        if asset.acquisition.source != "not-applicable" or any(value is not None for value in facts):
+            return "/acquisition templates require null facts with source not-applicable"
+    elif asset.acquisition.source == "not-applicable":
+        return "/acquisition source not-applicable is only valid for templates"
+    if not _valid_utc_second(asset.provenance.prepared_at_utc):
+        return "/provenance/preparedAtUtc must be a real UTC calendar second"
+    for position, source in enumerate(asset.provenance.sources):
+        if not _safe_relative_path(source.path):
+            return f"/provenance/sources/{position}/path must be relative without empty, '.' or '..' segments"
+
     files: set[str] = set()
 
     def claim(file: str, path: str) -> str | None:
@@ -273,6 +307,7 @@ def _asset_issue(asset: AnatomyAsset) -> str | None:
         )
         if issue:
             return issue
+    transform_targets: set[str] = set()
     for position, transform in enumerate(asset.transforms):
         path = f"/transforms/{position}"
         if transform.from_ != asset.coordinate_frame:
@@ -281,6 +316,11 @@ def _asset_issue(asset: AnatomyAsset) -> str | None:
             return f"{path}/to must differ from from"
         if not _finite(transform.matrix):
             return f"{path}/matrix must be finite"
+        if transform.to in transform_targets:
+            return f"{path}/to duplicates an earlier transform target"
+        transform_targets.add(transform.to)
+        if abs(_linear_determinant(transform.matrix)) < 1e-12:
+            return f"{path}/matrix linear component must be invertible"
         if transform.matrix[12:] != [0, 0, 0, 1]:
             return f"{path}/matrix last row must be [0, 0, 0, 1]"
     return None
@@ -337,7 +377,12 @@ def parse_document(raw: str | bytes) -> AnatomyAsset | AnatomyCatalog:
 
 def to_wire_dict(document: AnatomyAsset | AnatomyCatalog) -> dict[str, Any]:
     """Serialize after semantic validation. Raises ProtocolError."""
-    issue = semantic_issue(document)
+    wire = document.model_dump(mode="json")
+    try:
+        validated = _DOCUMENT.validate_python(wire, by_alias=True, by_name=False)
+    except ValidationError as exc:
+        raise ProtocolError("schema", _describe(exc)) from None
+    issue = semantic_issue(validated)
     if issue is not None:
         raise ProtocolError("semantic", issue)
-    return document.model_dump(mode="json")
+    return validated.model_dump(mode="json")
