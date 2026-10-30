@@ -1,0 +1,13 @@
+---
+globs: services/**/*.py, pipelines/**/*.py
+alwaysApply: false
+---
+
+# Python neuro-engine
+
+- Python 3.12 via uv; use type annotations, explicit schemas, Ruff and pytest.
+- Device adapter must expose capabilities, sampling rate, reference, channel labels, units and timestamps; do not hard-code 16 channels in generic processing.
+- Raw samples remain immutable after capture. Process in bounded buffers; separate acquisition, raw persistence, artifact annotation and derived pipelines.
+- Handle disconnections, dropped/duplicate/out-of-order packets and invalid device configurations deterministically.
+- Treat DSP/filtering, artifact handling and source inversion as parameterized, versioned computations; test on known synthetic signals.
+- Never perform training or expensive MRI segmentation in the EEG acquisition event loop. Document actual sampling/latency rather than inferred rates.

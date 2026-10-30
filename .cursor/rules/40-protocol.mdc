@@ -1,0 +1,12 @@
+---
+globs: packages/protocol/**, services/**/api/**, services/**/schemas/**
+alwaysApply: false
+---
+
+# Cross-language protocol contract
+
+- Maintain a language-neutral schema source of truth (JSON Schema or Protobuf, chosen in an ADR) and generated/validated TS/Python representations. Current TS types are a bootstrap, not a wire validator.
+- Contract changes require compatibility analysis, schema-version increment when breaking, migrations/replay fixtures, and an ADR.
+- Define device ID, monotonic sequence, channel-major/sample-major layout, samples per block, physical units, timebase, clock correction, acquisition vs receipt timestamp, dropped sample count and signal quality.
+- Never infer sample timestamp solely from render arrival time. Synthetic/test signals must carry provenance.
+- Add contract tests for producer and consumer; reject unknown/badly shaped frames in a controlled way.

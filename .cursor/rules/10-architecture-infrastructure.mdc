@@ -1,0 +1,13 @@
+---
+description: Architecture boundaries, local-first infrastructure, Nx/Yarn/uv tasks and dependency decisions
+alwaysApply: false
+---
+
+# Architecture and infrastructure
+
+- Read `docs/architecture/OVERVIEW.md`, `docs/standards/infrastructure.md` and accepted ADRs.
+- Preserve Nx orchestration, Yarn 4 workspaces, uv Python packaging, and versioned API contracts. Keep Python processes independent of JS package management.
+- Favor a local process boundary and typed WebSocket/HTTP contracts over premature distributed microservices, Kubernetes, AWS, MongoDB or cloud telemetry.
+- Organize acquisition adapters, DSP, inverse/source modeling, recording, inference and scene composition independently; no circular dependencies. Offline replay uses the same processing interfaces as live acquisition.
+- If a new service, framework, long-running process, port, cloud dependency, database, or CI dependency is proposed, justify it in an ADR with measured cost, operations and rollback.
+- Avoid Nx cache of device/live processes, nondeterministic stateful tests and private data. Define correct inputs/outputs for cached tasks.

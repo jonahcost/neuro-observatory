@@ -1,0 +1,13 @@
+---
+description: EEG, MRI, coregistration, source localization, ML inference, and neuroscientific data interpretations
+alwaysApply: false
+---
+
+# Scientific integrity and safety
+
+- Refer to `docs/standards/scientific-integrity.md`.
+- Scalp EEG is not a voxel-wise view of brain activity. Source-localized cortex maps are model-derived, resolution-limited and depend on electrode geometry, reference, conductivity assumptions, inverse regularization and artifacts.
+- Display observed sensor features and model estimates distinctly. Show quality/confidence, smoothing, derivation method and calibration version.
+- An anatomical MRI does not record live brain activity; a 3D external head scan is a different asset for physical headset fit.
+- Validate ML by separate recording sessions; flag distribution shifts, missing channels and unsound claims of emotion/thought decoding.
+- Do not provide clinical diagnosis or actionable treatment recommendations from prototype measurements.

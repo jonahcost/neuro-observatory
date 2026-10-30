@@ -1,0 +1,29 @@
+name: Governance
+
+on:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  architecture-governance:
+    name: architecture-governance
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Validate governance files and changes
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          EVENT_NAME: ${{ github.event_name }}
+        run: |
+          python3 -m unittest discover -s tools/governance/tests -v
+          if [ "$EVENT_NAME" = "pull_request" ]; then
+            python3 tools/governance/check_governance.py --base "$BASE_SHA" --head "$HEAD_SHA"
+          else
+            python3 tools/governance/check_governance.py --all
+          fi

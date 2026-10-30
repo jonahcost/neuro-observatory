@@ -1,0 +1,12 @@
+---
+globs: hardware/**
+alwaysApply: false
+---
+
+# Body-connected electronics and CAD
+
+- Always preserve a battery-powered and independently isolated body-connected boundary; no direct connection of mains-powered bench instruments while electrodes are worn.
+- Until qualified electrical safety review, custom EEG acquisition boards are bench-test-only with simulators/dummy loads. Not for human contact.
+- Record PCB revisions, part traceability, electrical safety hazards, test rigs, mechanical electrode pressure, contact materials and emergency disconnect behavior.
+- Keep CAD manufacturing files and schematics versioned; binary designs need reproducible exports and source/license provenance.
+- A hardware change that could affect leakage, isolation, input protection, current paths, power management or electrode contact requires owner approval and an explicit safety ADR.

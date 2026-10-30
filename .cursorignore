@@ -1,0 +1,27 @@
+# Private neurophysiology, anatomy and personally identifying datasets
+**/.env
+**/.env.*
+!**/.env.example
+!**/.env.template
+**/credentials.json
+**/secrets.json
+**/*.pem
+**/*.key
+**/id_rsa
+/data/
+/datasets/
+/recordings/
+/models/
+/artifacts/
+**/*.dcm
+**/*.nii
+**/*.nii.gz
+**/*.edf
+**/*.bdf
+**/*.xdf
+**/*.fif
+**/*.sqlite
+**/*.db
+**/.venv/
+**/node_modules/
+/dist/

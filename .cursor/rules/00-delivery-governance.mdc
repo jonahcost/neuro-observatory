@@ -1,0 +1,12 @@
+---
+alwaysApply: true
+---
+
+# Non-negotiable development workflow
+
+- Read `AGENTS.md` and relevant accepted decisions before editing.
+- Every implementation chunk must have one active work file and at least one ADR. Before code changes: document scope, acceptance criteria, risks, proposed decision. After verification: accepted ADR with owner authorization and completed work record with actual test evidence.
+- For high-impact choices stop for the owner's decision; never invent approval.
+- Preserve raw sensor data, accurate units, scientific provenance and device safety; never silently fabricate measurements.
+- Do not commit/push/merge/deploy, modify GitHub protections, weaken CI, or perform destructive cleanup without explicit authorization.
+- In the final answer report files changed, work/ADR links, checks actually run, and unresolved failures. See `docs/standards/development-workflow.md`.
