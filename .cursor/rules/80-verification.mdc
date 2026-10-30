@@ -1,0 +1,12 @@
+---
+description: Writing and reviewing tests, instrumentation, quality gates, performance and work completion
+alwaysApply: false
+---
+
+# Verification and quality bar
+
+- Every chunk includes verifiable acceptance criteria, tests and a completion work record with commands and observed results, not predicted results.
+- Prefer deterministic, offline fixtures and synthetic EEG. Test timestamps, gaps, reconnections, stale frames, corrupt frames and backpressure where applicable.
+- Test raw recording independence from renderer/inference failures; replay must be equivalent to live processing for the same input and configuration.
+- New numerical DSP/ML implementation needs ground-truth synthetic tests and cross-session evaluation as appropriate.
+- CI status cannot certify scientific validity or electrical safety. Surface these as manual review gates.

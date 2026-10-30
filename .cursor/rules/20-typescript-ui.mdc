@@ -1,0 +1,13 @@
+---
+globs: apps/**/*.ts, apps/**/*.tsx, packages/**/*.ts, packages/**/*.tsx
+alwaysApply: false
+---
+
+# TypeScript / React / 3D
+
+- TypeScript strict; no unreviewed `any`, unsafe casts, or silent error swallowing. Keep rendering/React components separate from transport acquisition and neuroscience.
+- Validate untrusted network messages at runtime against shared contracts; TS interfaces alone are not runtime validation.
+- Model units, time semantics and confidence/quality explicitly; do not show source estimates as direct cortical readings or uncalibrated probabilities as facts.
+- Decouple GPU frame rate from EEG acquisition frequency; throttle visual updates without dropping raw recordings.
+- Prefer accessible interactions; include loading, missing stream, degraded quality and reconnection states; dispose GPU resources and event listeners.
+- Add Vitest tests for nontrivial logic and component behavior; use integration/e2e tests for protocol and streaming paths.

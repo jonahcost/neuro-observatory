@@ -1,0 +1,3 @@
+# Cursor Agent prompt: start a work chunk
+
+Read root `AGENTS.md`, all relevant `.cursor/rules`, accepted ADRs and existing implementation first. We are working on **[precise feature or issue]**. Before editing source, inspect code and current tests, propose the smallest independently testable chunk, create an active work record and proposed ADR, and list meaningful alternatives, interfaces, failure modes, tests and rollback. Explicitly ask me to approve architecture/security/protocol/hardware decisions. After approval implement only the agreed slice, run tests and report actual results. Do not commit/push/merge or mark the ADR accepted without my authorization. When done finalize the completed work record with test evidence.

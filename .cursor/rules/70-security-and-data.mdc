@@ -1,0 +1,12 @@
+---
+globs: .github/**, tools/**, nx.json, package.json, yarn.lock, .yarnrc.yml, **/.env*, **/Dockerfile*
+alwaysApply: false
+---
+
+# Security / CI / infrastructure changes
+
+- Data stays local by default. Do not add SaaS SDKs, network egress, external error reporting, analytics, or remote caching without permission, privacy review and ADR.
+- No credentials, tokens, DICOM, MRI, EEG, XDF, physiological data or identifying photos in Git, issues, screenshots or agent context. Use fake/synthetic fixtures only.
+- CI gets read-only least-privilege token, pinned or reviewed actions and no secrets on untrusted PRs. Do not let agents weaken/change branch protections or governance checks to pass a build.
+- Do not auto-install new system packages, perform major version upgrades, or use `curl | sh` in project scripts absent explicit human approval.
+- Manage dependency updates separately; run lockfile checks and tests; security fixes should be focused and documented.
