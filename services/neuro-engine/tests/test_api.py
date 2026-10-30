@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import itertools
 import json
 import time
@@ -13,8 +14,10 @@ from jsonschema import Draft202012Validator
 from starlette.testclient import WebSocketTestSession
 from starlette.websockets import WebSocketDisconnect
 
+from neuro_engine.acquisition.base import StreamDescriptor
+from neuro_engine.acquisition.clock import MonotonicClock
 from neuro_engine.acquisition.service import AcquisitionState
-from neuro_engine.acquisition.synthetic import SyntheticConfig
+from neuro_engine.acquisition.synthetic import SyntheticConfig, SyntheticEegAdapter
 from neuro_engine.app import create_app
 from neuro_engine.config import EngineSettings
 from neuro_engine.protocol import v2
@@ -119,6 +122,39 @@ def test_client_messages_are_refused_with_1003(client: TestClient) -> None:
 def test_retired_v1_endpoint_is_gone(client: TestClient) -> None:
     with pytest.raises(WebSocketDisconnect), client.websocket_connect("/ws/eeg") as ws:
         ws.receive_text()
+
+
+def test_unencodable_message_closes_the_session_with_1011(client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
+    def broken_block_message(_event: object) -> v2.EegBlock:
+        raise v2.ProtocolError("semantic", "forced encoding failure")
+
+    monkeypatch.setattr("neuro_engine.api.ws.block_message", broken_block_message)
+    with client.websocket_connect("/ws/v2/eeg", headers=ORIGIN) as ws, pytest.raises(WebSocketDisconnect) as excinfo:
+        while True:
+            ws.receive_text()
+    assert excinfo.value.code == 1011
+    assert client.app.state.engine.service.state is AcquisitionState.STREAMING  # type: ignore[attr-defined]
+
+
+class SlowOpenAdapter(SyntheticEegAdapter):
+    async def open(self) -> StreamDescriptor:
+        await asyncio.sleep(0.5)
+        return await super().open()
+
+
+def test_status_comes_first_when_no_stream_is_open_and_metadata_follows() -> None:
+    settings = EngineSettings(synthetic=SyntheticConfig(block_size=5))
+    clock = MonotonicClock()
+    app = create_app(settings, clock=clock, adapter_factory=lambda: SlowOpenAdapter(settings.synthetic, clock))
+    with TestClient(app) as test_client, test_client.websocket_connect("/ws/v2/eeg", headers=ORIGIN) as ws:
+        messages = receive_messages(ws, 4)
+    first = v2.validate_server_message(messages[0])
+    assert isinstance(first, v2.StreamStatus)
+    assert first.state == "connecting" and first.stream_id is None
+    metadata = next(m for m in messages if m["type"] == "stream.metadata")
+    first_block = next(m for m in messages if m["type"] == "eeg.block")
+    assert messages.index(metadata) < messages.index(first_block)
+    assert first_block["streamId"] == metadata["streamId"]
 
 
 def test_disconnecting_clients_release_subscriptions_and_shutdown_stops_acquisition() -> None:

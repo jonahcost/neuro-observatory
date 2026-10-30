@@ -27,7 +27,7 @@ export type Counter = number;
 export type MonotonicMicroseconds = number;
 
 /**
- * Describes a stream. Sent first on every connection and whenever a new stream starts.
+ * Describes a stream. Sent first on every connection while a stream is open (otherwise stream.status comes first) and whenever a new stream starts.
  */
 export interface StreamMetadata {
   type: 'stream.metadata';
@@ -194,7 +194,7 @@ export interface StreamCounters {
    */
   blocksDroppedForClient: number;
   /**
-   * Sample-index advance per second of engine monotonic time since the stream was opened (includes acquisition gaps), or null until at least one second has elapsed.
+   * Sample-index advance per second of engine monotonic time between the first and the latest accepted device block of the current stream (includes acquisition gaps), or null until that span is at least one second.
    */
   effectiveSampleRateHz: number | null;
 }

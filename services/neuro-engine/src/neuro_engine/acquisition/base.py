@@ -7,15 +7,32 @@ downstream consumers.
 
 from __future__ import annotations
 
+import math
+import re
 from collections.abc import AsyncIterator
 from dataclasses import dataclass
-from typing import Literal, Protocol
+from typing import Literal, Protocol, get_args
 
 import numpy as np
 
 ChannelType = Literal["EEG", "EOG", "EMG", "ECG", "MISC"]
 SignalUnit = Literal["uV"]
 TimestampSource = Literal["synthetic-nominal", "host-receipt-fitted", "device-clock"]
+
+# Protocol v2 limits (packages/protocol/schemas/eeg-stream.v2.schema.json), enforced
+# here so that invalid adapter output fails at the acquisition boundary rather than
+# in every client session. tests/test_acquisition_limits.py keeps them in parity.
+MAX_SAFE_INTEGER = 2**53 - 1
+MAX_CHANNELS = 1024
+MAX_BLOCK_SAMPLES = 10_000
+MAX_SAMPLE_RATE_HZ = 100_000
+MAX_LABEL_LENGTH = 64
+MAX_TEXT_LENGTH = 128
+SLUG_PATTERN = re.compile(r"[a-z0-9][a-z0-9-]{0,63}")
+CONFIG_HASH_PATTERN = re.compile(r"sha256:[0-9a-f]{64}")
+CHANNEL_TYPES = frozenset(get_args(ChannelType))
+SIGNAL_UNITS = frozenset(get_args(SignalUnit))
+TIMESTAMP_SOURCES = frozenset(get_args(TimestampSource))
 
 
 class AcquisitionError(Exception):
@@ -45,12 +62,25 @@ class DeviceDisconnectedError(AcquisitionError):
     retryable = True
 
 
+def _require_text(name: str, value: object, max_length: int = MAX_TEXT_LENGTH) -> None:
+    if not isinstance(value, str) or not 1 <= len(value) <= max_length:
+        raise DeviceConfigError(f"{name} must be a string of 1-{max_length} characters")
+
+
 @dataclass(frozen=True, slots=True)
 class ChannelSpec:
     label: str
     reference: str
     type: ChannelType = "EEG"
     unit: SignalUnit = "uV"
+
+    def __post_init__(self) -> None:
+        _require_text("channel label", self.label, MAX_LABEL_LENGTH)
+        _require_text("channel reference", self.reference)
+        if self.type not in CHANNEL_TYPES:
+            raise DeviceConfigError(f"channel type must be one of {sorted(CHANNEL_TYPES)}")
+        if self.unit not in SIGNAL_UNITS:
+            raise DeviceConfigError(f"channel unit must be one of {sorted(SIGNAL_UNITS)}")
 
 
 @dataclass(frozen=True, slots=True)
@@ -61,6 +91,15 @@ class DeviceInfo:
     adapter_version: str
     firmware_version: str | None = None
 
+    def __post_init__(self) -> None:
+        if not isinstance(self.kind, str) or SLUG_PATTERN.fullmatch(self.kind) is None:
+            raise DeviceConfigError("device kind must be lowercase kebab-case, 1-64 characters")
+        _require_text("device model", self.model)
+        _require_text("device id", self.device_id)
+        _require_text("adapter version", self.adapter_version)
+        if self.firmware_version is not None:
+            _require_text("firmware version", self.firmware_version)
+
 
 @dataclass(frozen=True, slots=True)
 class SyntheticProvenance:
@@ -70,6 +109,14 @@ class SyntheticProvenance:
     generator_version: str
     seed: int
     config_hash: str
+
+    def __post_init__(self) -> None:
+        _require_text("generator", self.generator)
+        _require_text("generator version", self.generator_version)
+        if isinstance(self.seed, bool) or not isinstance(self.seed, int) or not 0 <= self.seed <= MAX_SAFE_INTEGER:
+            raise DeviceConfigError(f"seed must be an integer in [0, {MAX_SAFE_INTEGER}]")
+        if not isinstance(self.config_hash, str) or CONFIG_HASH_PATTERN.fullmatch(self.config_hash) is None:
+            raise DeviceConfigError("config hash must be 'sha256:' followed by 64 lowercase hex digits")
 
 
 @dataclass(frozen=True, slots=True)
@@ -88,13 +135,18 @@ class StreamDescriptor:
     provenance: SyntheticProvenance | DeviceProvenance
 
     def __post_init__(self) -> None:
-        if not self.channels:
-            raise DeviceConfigError("a stream needs at least one channel")
+        if not 1 <= len(self.channels) <= MAX_CHANNELS:
+            raise DeviceConfigError(f"a stream needs 1 to {MAX_CHANNELS} channels")
         labels = [channel.label for channel in self.channels]
         if len(set(labels)) != len(labels):
             raise DeviceConfigError("channel labels must be unique")
-        if not np.isfinite(self.nominal_sample_rate_hz) or self.nominal_sample_rate_hz <= 0:
-            raise DeviceConfigError("nominal sample rate must be positive and finite")
+        rate = self.nominal_sample_rate_hz
+        if isinstance(rate, bool) or not isinstance(rate, int | float) or not math.isfinite(rate):
+            raise DeviceConfigError("nominal sample rate must be a finite number")
+        if not 0 < rate <= MAX_SAMPLE_RATE_HZ:
+            raise DeviceConfigError(f"nominal sample rate must be in (0, {MAX_SAMPLE_RATE_HZ}] Hz")
+        if self.timestamp_source not in TIMESTAMP_SOURCES:
+            raise DeviceConfigError(f"timestamp source must be one of {sorted(TIMESTAMP_SOURCES)}")
 
     @property
     def channel_count(self) -> int:
@@ -106,10 +158,20 @@ class SampleBlock:
     """Immutable, contiguous block of raw samples from an adapter.
 
     `data` is a read-only float64 array shaped (channels, samples) in each
-    channel's declared unit. `first_sample_index` comes from the device's own
-    counter (or the generator), never from arrival order.
-    `device_timestamps_us` optionally preserves raw per-sample device/host
-    timestamps for the future recorder; it is not sent to live-view clients.
+    channel's declared unit.
+
+    `first_sample_index` counts samples acquired since `open()`: 0 is the first
+    sample after `open()`, the counter never wraps, and an index jump means the
+    skipped samples were lost. It is derived from device sample/packet counters
+    (rebased to 0 and unwrapped by the adapter), never from arrival order. If an
+    adapter cannot determine how many samples were lost (e.g. a hardware counter
+    wrapped during an outage), it must raise DeviceDisconnectedError so a new
+    stream starts instead of declaring a guessed gap.
+
+    `first_sample_time_us` is the estimated acquisition time of the first sample
+    on the engine monotonic clock. `device_timestamps_us` optionally preserves
+    raw per-sample device/host timestamps for the future recorder; it is not
+    sent to live-view clients.
     """
 
     first_sample_index: int
@@ -169,6 +231,9 @@ class DeviceAdapter(Protocol):
 
     Lifecycle: `open()` once, iterate `blocks()` until it ends or raises, then
     `close()` (idempotent, always called by the service). Adapters are single-use.
+    Sample indices restart at 0 for every adapter instance (see SampleBlock).
+    Errors raised by `close()` are logged by the service and never replace the
+    session's outcome.
     """
 
     async def open(self) -> StreamDescriptor:

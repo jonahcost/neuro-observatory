@@ -63,6 +63,8 @@ All commands run on 2026-10-30 from the repository root on macOS (darwin), Pytho
 
 Not run: GitHub Actions CI (nothing committed or pushed); browser-level manual check of the desktop UI against a live engine (covered by component tests with a stub WebSocket and the engine smoke test, not by an end-to-end browser run).
 
+Correction (2026-10-30): the change set was later committed as `a43fbeb` on `01A/eeg-acquisition-and-streaming-foundation`. GitHub Actions `CI / verify` and `Governance / architecture-governance` passed on [PR #8](https://github.com/jonahcost/neuro-observatory/pull/8). The independent review that followed is resolved by `docs/work/completed/WORK-2026-10-30-acquisition-boundary-hardening.md` (ADR-0009).
+
 ## Risks and Follow-ups
 
 Risks / known gaps:

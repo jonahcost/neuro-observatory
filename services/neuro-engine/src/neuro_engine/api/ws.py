@@ -8,8 +8,10 @@ import logging
 from typing import TYPE_CHECKING
 
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
+from pydantic import ValidationError
+from starlette.websockets import WebSocketState
 
-from neuro_engine.acquisition.base import StreamBlock
+from neuro_engine.acquisition.base import ActiveStream, StreamBlock
 from neuro_engine.protocol import v2
 from neuro_engine.protocol.convert import (
     block_message,
@@ -32,6 +34,7 @@ router = APIRouter()
 
 CLOSE_UNSUPPORTED_DATA = 1003
 CLOSE_POLICY_VIOLATION = 1008
+CLOSE_INTERNAL_ERROR = 1011
 CLOSE_TRY_AGAIN_LATER = 1013
 
 
@@ -46,13 +49,16 @@ async def eeg_stream(websocket: WebSocket) -> None:
         await websocket.close(code=CLOSE_POLICY_VIOLATION)
         return
     await websocket.accept()
+    # Subscribing and reading the current stream must happen without an await in
+    # between, so every queued event is newer than the metadata sent first.
     subscription = runtime.hub.subscribe(
         "websocket", DeliveryPolicy.LIVE_VIEW, runtime.settings.live_view_queue_blocks
     )
+    current = runtime.service.current_stream
     close_code: int | None = None
     try:
         async with asyncio.TaskGroup() as session:
-            session.create_task(_send_stream(websocket, runtime, subscription))
+            session.create_task(_send_stream(websocket, runtime, subscription, current))
             session.create_task(_receive_until_closed(websocket))
     except* _SessionEnded as ended:
         close_code = next(e.close_code for e in ended.exceptions if isinstance(e, _SessionEnded))
@@ -79,16 +85,28 @@ async def _receive_until_closed(websocket: WebSocket) -> None:
     raise _SessionEnded(CLOSE_UNSUPPORTED_DATA)
 
 
-async def _send_stream(websocket: WebSocket, runtime: EngineRuntime, subscription: Subscription) -> None:
+async def _send_stream(
+    websocket: WebSocket, runtime: EngineRuntime, subscription: Subscription, current: ActiveStream | None
+) -> None:
     try:
-        await _forward_events(websocket, runtime, subscription)
+        await _forward_events(websocket, runtime, subscription, current)
     except SubscriptionClosed:
         raise _SessionEnded(CLOSE_TRY_AGAIN_LATER) from None
-    except (WebSocketDisconnect, RuntimeError, OSError):
+    except (v2.ProtocolError, ValidationError):
+        logger.exception("Could not encode a protocol v2 message; closing the session")
+        raise _SessionEnded(CLOSE_INTERNAL_ERROR) from None
+    except (WebSocketDisconnect, OSError):
         raise _SessionEnded(None) from None
+    except RuntimeError:
+        # Starlette raises RuntimeError when sending on a socket that is already closed.
+        if WebSocketState.DISCONNECTED in (websocket.client_state, websocket.application_state):
+            raise _SessionEnded(None) from None
+        raise
 
 
-async def _forward_events(websocket: WebSocket, runtime: EngineRuntime, subscription: Subscription) -> None:
+async def _forward_events(
+    websocket: WebSocket, runtime: EngineRuntime, subscription: Subscription, current: ActiveStream | None
+) -> None:
     service = runtime.service
     interval = runtime.settings.status_interval_s
     loop = asyncio.get_running_loop()
@@ -97,7 +115,6 @@ async def _forward_events(websocket: WebSocket, runtime: EngineRuntime, subscrip
     async def send_status() -> None:
         await websocket.send_text(v2.encode(status_message(service.status(), subscription.dropped_blocks)))
 
-    current = service.current_stream
     if current is not None:
         metadata = metadata_message(current)
         await websocket.send_text(v2.encode(metadata))

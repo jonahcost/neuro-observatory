@@ -14,6 +14,7 @@ from typing import Annotated, Any, Literal
 
 from pydantic import (
     BaseModel,
+    BeforeValidator,
     ConfigDict,
     Field,
     SerializerFunctionWrapHandler,
@@ -29,7 +30,17 @@ MAX_SAFE_INTEGER = 2**53 - 1
 
 ParseErrorKind = Literal["json", "schema", "unsupported-version", "semantic"]
 
-Counter = Annotated[int, Field(ge=0, le=MAX_SAFE_INTEGER)]
+
+def _integral_float_to_int(value: Any) -> Any:
+    # JSON Schema `integer` accepts numbers with a zero fractional part (e.g. 10.0),
+    # and JavaScript cannot tell them apart from 10; strict mode would reject them.
+    if type(value) is float and value.is_integer():
+        return int(value)
+    return value
+
+
+JsonInteger = BeforeValidator(_integral_float_to_int)
+Counter = Annotated[int, JsonInteger, Field(ge=0, le=MAX_SAFE_INTEGER)]
 StreamId = Annotated[str, StringConstraints(pattern=r"^[A-Za-z0-9._:-]{1,128}$")]
 ShortText = Annotated[str, StringConstraints(min_length=1, max_length=128)]
 Slug = Annotated[str, StringConstraints(pattern=r"^[a-z0-9][a-z0-9-]{0,63}$")]
@@ -115,7 +126,7 @@ class EegBlock(_Message):
     stream_id: StreamId
     block_sequence: Counter
     first_sample_index: Counter
-    sample_count: Annotated[int, Field(ge=1, le=10_000)]
+    sample_count: Annotated[int, JsonInteger, Field(ge=1, le=10_000)]
     first_sample_time_us: Counter
     dropped_samples_before: Counter
     samples: Annotated[
@@ -221,12 +232,21 @@ def validate_server_message(
     return message
 
 
+def _reject_non_standard_constant(name: str) -> Any:
+    raise ValueError(f"{name} is not valid JSON")
+
+
+def decode_json(raw: str | bytes) -> Any:
+    """Decode standard JSON only. Like JSON.parse, rejects NaN/Infinity/-Infinity literals."""
+    return json.loads(raw, parse_constant=_reject_non_standard_constant)
+
+
 def parse_server_message(
     raw: str | bytes, metadata: StreamMetadata | None = None
 ) -> StreamMetadata | EegBlock | StreamStatus:
     """Parse and validate raw message text. Raises ProtocolError."""
     try:
-        value = json.loads(raw)
+        value = decode_json(raw)
     except (ValueError, UnicodeDecodeError):
         raise ProtocolError("json", "message is not valid JSON") from None
     return validate_server_message(value, metadata)

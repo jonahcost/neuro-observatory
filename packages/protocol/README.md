@@ -19,9 +19,11 @@ Both languages run every fixture in `fixtures/v2/manifest.json` and every scenar
 
 Every message has `type`, `schemaVersion: 2` and `streamId`. Unknown fields are rejected.
 
-- **`stream.metadata`** — sent first on every connection and whenever a new stream starts. Device, provenance (`synthetic` with generator/seed/config hash, or `device`), `nominalSampleRateHz`, ordered `channels` (`index`, `label`, `type`, `unit`, `reference`), `layout: "channel-major"`, and `timebase`.
+- **`stream.metadata`** — sent first on every connection while a stream is open (otherwise `stream.status` comes first and metadata follows when a stream opens), and whenever a new stream starts. Device, provenance (`synthetic` with generator/seed/config hash, or `device`), `nominalSampleRateHz`, ordered `channels` (`index`, `label`, `type`, `unit`, `reference`), `layout: "channel-major"`, and `timebase`.
 - **`eeg.block`** — `samples[channel][sample]` in µV (`unit: "uV"`), float64 without rounding, in metadata channel order. `firstSampleIndex` counts samples since the stream started; `blockSequence` counts blocks; `droppedSamplesBefore` declares samples the device/engine lost immediately before this block. Missing samples are never fabricated.
-- **`stream.status`** — acquisition state (`idle|connecting|streaming|reconnecting|stopped|failed`), counters and last error. `blocksDroppedForClient` counts blocks the engine dropped for *this* connection because it fell behind.
+- **`stream.status`** — acquisition state (`idle|connecting|streaming|reconnecting|stopped|failed`), counters and last error. `blocksDroppedForClient` counts blocks the engine dropped for *this* connection because it fell behind. `effectiveSampleRateHz` is the sample-index advance per second between the first and the latest accepted device block (gaps included), `null` until that span reaches 1 s.
+
+The engine splits device reads larger than 10 000 samples into consecutive blocks; the *k*-th part starts at `firstSampleTimeUs + round(offset × 1e6 / nominalSampleRateHz)`.
 
 Client → server messages are not part of v2; the engine closes the socket with code 1003 if it receives one.
 
@@ -44,6 +46,8 @@ Client → server messages are not part of v2; the engine closes the socket with
 | `semantic` | Schema-valid but inconsistent: channel indices ≠ positions, duplicate labels, row count ≠ channel count, row length ≠ `sampleCount`, non-finite values, or `streamId` ≠ current metadata |
 
 Error details name the location and rule but never echo sample values.
+
+JSON-level rules shared by both languages: integer fields accept numbers with a zero fractional part (`10.0`), as JSON Schema `integer` does; `NaN`/`Infinity` literals are not JSON and are `json` errors (Python decodes with `neuro_engine.protocol.v2.decode_json`). Known limitation: the Python test oracle (`jsonschema`) evaluates `pattern` with `re.search`, so a trailing newline passes `$` there while Ajv and Pydantic reject it.
 
 ## Changing the contract
 

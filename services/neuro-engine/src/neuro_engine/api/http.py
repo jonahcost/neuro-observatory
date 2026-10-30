@@ -5,7 +5,6 @@ from typing import TYPE_CHECKING, Any
 from fastapi import APIRouter, Request
 
 from neuro_engine.acquisition.base import SyntheticProvenance
-from neuro_engine.acquisition.service import AcquisitionState
 from neuro_engine.protocol import v2
 from neuro_engine.protocol.convert import metadata_message, status_message
 
@@ -19,14 +18,17 @@ def _runtime(request: Request) -> EngineRuntime:
     return request.app.state.engine
 
 
+# Handlers are `async def` so they run on the event loop that owns acquisition state.
 @router.get("/health")
-def health(request: Request) -> dict[str, Any]:
+async def health(request: Request) -> dict[str, Any]:
     service = _runtime(request).service
     status = service.status()
+    health = service.health()
     stream = service.current_stream
     descriptor = stream.descriptor if stream else None
     return {
-        "status": "degraded" if status.state is AcquisitionState.FAILED else "ok",
+        "status": "ok" if health.ok else "degraded",
+        "degradedReasons": list(health.reasons),
         "service": "neuro-engine",
         "protocolVersion": v2.SCHEMA_VERSION,
         "acquisition": {
@@ -36,12 +38,18 @@ def health(request: Request) -> dict[str, Any]:
             "synthetic": isinstance(descriptor.provenance, SyntheticProvenance) if descriptor else None,
             "channelCount": descriptor.channel_count if descriptor else None,
             "nominalSampleRateHz": descriptor.nominal_sample_rate_hz if descriptor else None,
+            "counters": {
+                "samplesAcquired": status.samples_acquired,
+                "acquisitionGapSamples": status.acquisition_gap_samples,
+                "rejectedBlocks": status.rejected_blocks,
+                "effectiveSampleRateHz": status.effective_sample_rate_hz,
+            },
         },
     }
 
 
 @router.get("/api/v2/stream")
-def stream(request: Request) -> dict[str, Any]:
+async def stream(request: Request) -> dict[str, Any]:
     service = _runtime(request).service
     current = service.current_stream
     return {

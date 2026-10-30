@@ -153,6 +153,29 @@ describe('EegStreamClient', () => {
     expect(later.integrity.blocksAccepted).toBe(2);
   });
 
+  it('isolates onBlock listeners: a throwing listener is counted and does not stop the others', () => {
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    const received: number[] = [];
+    client.onBlock(() => {
+      throw new Error('waveform buffer bug');
+    });
+    client.onBlock((b) => received.push(b.blockSequence));
+    client.start();
+    latest().open();
+    latest().send(metadata());
+    latest().send(block(0, 0));
+    latest().send(block(1, 5));
+    vi.advanceTimersByTime(50);
+
+    expect(received).toEqual([0, 1]);
+    const snap = client.getSnapshot();
+    expect(snap.listenerErrors).toBe(2);
+    expect(snap.health).toBe('live');
+    expect(snap.lastBlock?.blockSequence).toBe(1);
+    expect(consoleError).toHaveBeenCalledTimes(2);
+    consoleError.mockRestore();
+  });
+
   it('rejects malformed, schema-invalid and semantically invalid messages without disconnecting', () => {
     const received: EegBlock[] = [];
     client.onBlock((b) => received.push(b));

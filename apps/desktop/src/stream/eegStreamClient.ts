@@ -31,6 +31,8 @@ export interface EegStreamSnapshot {
   invalidMessages: number;
   lastProtocolError: ParseError | null;
   reconnectAttempt: number;
+  /** `onBlock` listeners that threw; each listener is isolated from the others. */
+  listenerErrors: number;
 }
 
 /** The subset of the browser WebSocket used by the client (injectable for tests). */
@@ -90,6 +92,7 @@ export class EegStreamClient {
   private invalidMessages = 0;
   private lastProtocolError: ParseError | null = null;
   private reconnectAttempt = 0;
+  private listenerErrors = 0;
   private snapshot: EegStreamSnapshot;
 
   constructor(options: EegStreamClientOptions = {}) {
@@ -250,7 +253,12 @@ export class EegStreamClient {
     this.health = 'live';
     this.armStaleTimer(block, metadata);
     for (const listener of this.blockListeners) {
-      listener(block, metadata);
+      try {
+        listener(block, metadata);
+      } catch (error) {
+        this.listenerErrors += 1;
+        console.error('EegStreamClient: an onBlock listener threw', error);
+      }
     }
     if (becameLive) {
       this.notifyNow();
@@ -313,6 +321,7 @@ export class EegStreamClient {
       invalidMessages: this.invalidMessages,
       lastProtocolError: this.lastProtocolError,
       reconnectAttempt: this.reconnectAttempt,
+      listenerErrors: this.listenerErrors,
     };
   }
 }

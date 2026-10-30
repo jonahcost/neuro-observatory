@@ -35,9 +35,9 @@ def test_canonical_schema_agrees_with_expectation(case: dict, schema_validator: 
     text = load_fixture_text(case["file"])
     if case["expect"] == "json":
         with pytest.raises(ValueError):
-            json.loads(text)
+            v2.decode_json(text)
         return
-    schema_valid = schema_validator.is_valid(json.loads(text))
+    schema_valid = schema_validator.is_valid(v2.decode_json(text))
     # Semantic rules are, by definition, outside what the schema can express.
     assert schema_valid is (case["expect"] in ("valid", "semantic"))
 

@@ -18,9 +18,13 @@ Acquisition starts with the application lifespan and runs whether or not any cli
 
 | Path | Description |
 | --- | --- |
-| `GET /health` | Service status (`degraded` when acquisition failed), protocol version and acquisition summary |
+| `GET /health` | `ok`, or `degraded` with `degradedReasons`: `not-streaming` (state is not `streaming`), `no-recent-data` (no accepted block within 3 block durations, at least 1 s), `recent-rejections` (a device block was rejected within that window). Also protocol version, acquisition summary and counters |
 | `GET /api/v2/stream` | Current `stream.metadata` (or `null`) and `stream.status` |
-| `WS /ws/v2/eeg` | Metadata, then status, then `eeg.block` messages and periodic status. Browser `Origin` must be in the allowlist (otherwise the handshake is rejected); client messages close with 1003; if the engine closes the client's subscription the socket closes with 1013 (try again later) |
+| `WS /ws/v2/eeg` | Metadata (when a stream is open), then status, then `eeg.block` messages and periodic status; metadata is re-sent whenever a new stream opens. Browser `Origin` must be in the allowlist (otherwise the handshake is rejected); client messages close with 1003; a message that cannot be encoded closes with 1011; if the engine closes the client's subscription the socket closes with 1013 (try again later) |
+
+## Adapter contract
+
+Adapters implement `acquisition.base.DeviceAdapter`. Descriptors are checked against the protocol v2 limits when constructed (violations are non-retryable `DeviceConfigError`). Sample indices start at 0 after `open()`, never wrap and are derived from device counters; if an adapter cannot tell how many samples were lost it raises `DeviceDisconnectedError` so a new stream starts. The service rejects and counts malformed, duplicate, overlapping or out-of-range blocks (one non-finite value rejects the whole block; see ADR-0009), splits blocks larger than 10 000 samples without changing values, and logs `close()` failures without letting them replace the session outcome.
 
 ## Configuration (environment)
 

@@ -65,7 +65,8 @@ export function StreamStatusPanel({ snapshot }: { snapshot: EegStreamSnapshot })
           {`acquisition gaps ${integrity.acquisitionGapSamples} samples; ` +
             `dropped in transport ${integrity.transportDroppedBlocks} blocks; ` +
             `duplicate/out-of-order ${integrity.duplicateBlocks + integrity.outOfOrderBlocks}; ` +
-            `invalid messages ${snapshot.invalidMessages}`}
+            `invalid messages ${snapshot.invalidMessages}; ` +
+            `sample consumer errors ${snapshot.listenerErrors}`}
         </dd>
       </dl>
       {snapshot.lastProtocolError ? (

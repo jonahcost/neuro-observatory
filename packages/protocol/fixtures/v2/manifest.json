@@ -31,6 +31,12 @@
       "context": "valid/metadata-device-2ch.json"
     },
     {
+      "file": "valid/block-integral-float-counters.json",
+      "expect": "valid",
+      "description": "Integer fields written with a zero fractional part (10.0) are JSON Schema integers",
+      "context": "valid/metadata-device-2ch.json"
+    },
+    {
       "file": "valid/status-streaming.json",
       "expect": "valid",
       "description": "Streaming status with counters"
@@ -44,6 +50,11 @@
       "file": "invalid/not-json.txt",
       "expect": "json",
       "description": "Truncated JSON text"
+    },
+    {
+      "file": "invalid/block-nan-literal.txt",
+      "expect": "json",
+      "description": "NaN/Infinity literals are not JSON (some decoders accept them)"
     },
     {
       "file": "invalid/not-object.json",

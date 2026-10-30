@@ -39,6 +39,7 @@ function snapshot(overrides: Partial<EegStreamSnapshot> = {}): EegStreamSnapshot
     invalidMessages: 1,
     lastProtocolError: null,
     reconnectAttempt: 0,
+    listenerErrors: 2,
     ...overrides,
   };
 }
@@ -55,6 +56,7 @@ describe('StreamStatusPanel', () => {
     expect(integrity).toContain('acquisition gaps 4 samples');
     expect(integrity).toContain('dropped in transport 2 blocks');
     expect(integrity).toContain('invalid messages 1');
+    expect(integrity).toContain('sample consumer errors 2');
   });
 
   it('shows waiting, stale, reconnecting and incompatible states', () => {
