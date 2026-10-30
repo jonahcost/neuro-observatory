@@ -21,6 +21,34 @@ export {
   type ParseErrorKind,
   type ParseResult,
 } from './validate';
+export type {
+  AnatomyAsset,
+  AnatomyCatalog,
+  AnatomyDocument,
+  AnatomyKind,
+  AssetSummary,
+  BufferRef,
+  CoordinateFrame,
+  CoordinateTransform,
+  DataLicense,
+  Hemisphere,
+  MriAcquisition,
+  Parcellation,
+  ParcellationLabel,
+  SubjectRef,
+  SurfaceKind,
+  SurfaceMesh,
+} from './generated/anatomy-asset.v1';
+export {
+  ANATOMY_SCHEMA_VERSION,
+  parseAnatomyAsset,
+  parseAnatomyCatalog,
+  parseAnatomyDocument,
+  surfaceGeometryIssue,
+  validateAnatomyDocument,
+  vertexLabelsIssue,
+  type AnatomyParseResult,
+} from './anatomy';
 export {
   StreamIntegrityTracker,
   emptyIntegrityCounters,

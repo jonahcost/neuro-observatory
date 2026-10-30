@@ -1,0 +1,342 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://neuro-observatory.invalid/protocol/anatomy-asset.v1.schema.json",
+  "title": "AnatomyDocument",
+  "description": "Neuro Observatory anatomy asset contract v1: documents served by the neuro-engine that describe prepared, render-ready cortical geometry. Canonical, language-neutral source of truth (ADR-0010). Geometry is anatomy only; it never carries activity.",
+  "oneOf": [{ "$ref": "#/$defs/AnatomyAsset" }, { "$ref": "#/$defs/AnatomyCatalog" }],
+  "$defs": {
+    "AnatomySchemaVersion": {
+      "description": "Anatomy contract major version. Incremented on any breaking change.",
+      "const": 1
+    },
+    "AssetId": {
+      "description": "Content-addressed identifier of one prepared asset. Equal IDs imply identical sources, options and pipeline version.",
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9._-]{0,127}$"
+    },
+    "AssetFileName": {
+      "description": "File name inside the asset directory; never a path.",
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9._-]{0,127}$"
+    },
+    "Sha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "AnatomyText": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128
+    },
+    "LongText": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 2000
+    },
+    "AnatomySlug": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9.-]{0,63}$"
+    },
+    "Count": {
+      "description": "Non-negative integer within the JSON/JavaScript safe-integer range.",
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 9007199254740991
+    },
+    "Int32LabelIndex": {
+      "description": "Non-negative label index representable by the int32 vertex-label buffer.",
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 2147483647
+    },
+    "Vec3": {
+      "type": "array",
+      "items": { "type": "number" },
+      "minItems": 3,
+      "maxItems": 3
+    },
+    "Matrix4": {
+      "description": "4x4 affine matrix, row-major, 16 numbers. The last row must be [0, 0, 0, 1].",
+      "type": "array",
+      "items": { "type": "number" },
+      "minItems": 16,
+      "maxItems": 16
+    },
+    "Hemisphere": {
+      "description": "FreeSurfer hemisphere: lh (left) or rh (right).",
+      "enum": ["lh", "rh"]
+    },
+    "SurfaceKind": {
+      "description": "FreeSurfer surface. pial and white are anatomical boundaries; inflated is a smoothed visualisation surface sharing the same vertices.",
+      "enum": ["pial", "white", "inflated"]
+    },
+    "AnatomyKind": {
+      "description": "template: population average (e.g. fsaverage). reference-subject: a real, non-user participant from a public dataset. personal: derived from the user's own MRI (restricted data).",
+      "enum": ["template", "reference-subject", "personal"]
+    },
+    "CoordinateFrame": {
+      "description": "freesurfer-surface-ras: FreeSurfer 'tkrRAS' surface coordinates (+x right, +y anterior, +z superior). scanner-ras: the volume's world (scanner) RAS. mni305-ras: MNI305 space (equal to surface RAS for fsaverage). All in millimetres.",
+      "enum": ["freesurfer-surface-ras", "scanner-ras", "mni305-ras"]
+    },
+    "SubjectRef": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["datasetId", "datasetVersion", "subjectId", "sessionId", "displayName"],
+      "properties": {
+        "datasetId": { "$ref": "#/$defs/AnatomySlug" },
+        "datasetVersion": { "$ref": "#/$defs/AnatomyText" },
+        "subjectId": { "$ref": "#/$defs/AnatomyText" },
+        "sessionId": { "oneOf": [{ "$ref": "#/$defs/AnatomyText" }, { "type": "null" }] },
+        "displayName": { "$ref": "#/$defs/AnatomyText" }
+      }
+    },
+    "MriAcquisition": {
+      "description": "Structural MRI acquisition facts, each with where they came from. Unknown values are null, never guessed.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["fieldStrengthTesla", "sequence", "scanner", "source"],
+      "properties": {
+        "fieldStrengthTesla": {
+          "oneOf": [{ "type": "number", "exclusiveMinimum": 0, "maximum": 20 }, { "type": "null" }]
+        },
+        "sequence": { "oneOf": [{ "$ref": "#/$defs/AnatomyText" }, { "type": "null" }] },
+        "scanner": { "oneOf": [{ "$ref": "#/$defs/AnatomyText" }, { "type": "null" }] },
+        "source": {
+          "description": "Where the values above come from: a BIDS sidecar, the dataset README, the acquisition site's documentation (site-level, not per scan), a user declaration, or not applicable (template).",
+          "enum": ["sidecar", "dataset-readme", "site-documentation", "user-declared", "not-applicable"]
+        }
+      }
+    },
+    "CoordinateTransform": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["from", "to", "matrix", "units", "source"],
+      "properties": {
+        "from": { "$ref": "#/$defs/CoordinateFrame" },
+        "to": { "$ref": "#/$defs/CoordinateFrame" },
+        "matrix": { "$ref": "#/$defs/Matrix4" },
+        "units": { "const": "mm" },
+        "source": {
+          "description": "How the transform was obtained, e.g. 'surface volume_info c_ras' or 'fsaverage definition'.",
+          "$ref": "#/$defs/AnatomyText"
+        }
+      }
+    },
+    "BufferRef": {
+      "description": "Little-endian binary file in the asset directory.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["file", "dtype", "byteLength", "sha256"],
+      "properties": {
+        "file": { "$ref": "#/$defs/AssetFileName" },
+        "dtype": { "enum": ["float32", "uint32", "int32"] },
+        "byteLength": { "$ref": "#/$defs/Count" },
+        "sha256": { "$ref": "#/$defs/Sha256" }
+      }
+    },
+    "Bounds": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["min", "max"],
+      "properties": {
+        "min": { "$ref": "#/$defs/Vec3" },
+        "max": { "$ref": "#/$defs/Vec3" }
+      }
+    },
+    "SurfaceMesh": {
+      "description": "One hemisphere surface. positions: float32[3 * vertexCount] (x, y, z in mm, in the asset's coordinateFrame). indices: uint32[3 * triangleCount], counter-clockwise seen from outside, as stored by FreeSurfer. Vertex order is FreeSurfer's and is shared by every surface of the hemisphere.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["hemisphere", "surface", "vertexCount", "triangleCount", "positions", "indices", "boundsMm"],
+      "properties": {
+        "hemisphere": { "$ref": "#/$defs/Hemisphere" },
+        "surface": { "$ref": "#/$defs/SurfaceKind" },
+        "vertexCount": { "type": "integer", "minimum": 4, "maximum": 2000000 },
+        "triangleCount": { "type": "integer", "minimum": 4, "maximum": 4000000 },
+        "positions": { "$ref": "#/$defs/BufferRef" },
+        "indices": { "$ref": "#/$defs/BufferRef" },
+        "boundsMm": { "$ref": "#/$defs/Bounds" }
+      }
+    },
+    "ParcellationLabel": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["index", "name", "rgba"],
+      "properties": {
+        "index": { "$ref": "#/$defs/Int32LabelIndex" },
+        "name": { "$ref": "#/$defs/AnatomyText" },
+        "rgba": {
+          "type": "array",
+          "items": { "type": "integer", "minimum": 0, "maximum": 255 },
+          "minItems": 4,
+          "maxItems": 4
+        }
+      }
+    },
+    "Parcellation": {
+      "description": "Anatomical atlas labels per vertex (not activity). vertexLabels: int32[vertexCount], each a label index or -1 for unlabelled.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["atlas", "description", "hemisphere", "vertexCount", "labels", "vertexLabels"],
+      "properties": {
+        "atlas": { "$ref": "#/$defs/AnatomySlug" },
+        "description": { "$ref": "#/$defs/AnatomyText" },
+        "hemisphere": { "$ref": "#/$defs/Hemisphere" },
+        "vertexCount": { "type": "integer", "minimum": 4, "maximum": 2000000 },
+        "labels": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/ParcellationLabel" },
+          "minItems": 1,
+          "maxItems": 1000
+        },
+        "vertexLabels": { "$ref": "#/$defs/BufferRef" }
+      }
+    },
+    "SourceFile": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "bytes", "sha256"],
+      "properties": {
+        "path": {
+          "description": "POSIX path relative to the engine data root (e.g. raw/ds000248/1.2.4/...); never absolute.",
+          "type": "string",
+          "pattern": "^[A-Za-z0-9_][A-Za-z0-9._/+-]{0,255}$"
+        },
+        "bytes": { "$ref": "#/$defs/Count" },
+        "sha256": { "$ref": "#/$defs/Sha256" }
+      }
+    },
+    "ToolVersion": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "version"],
+      "properties": {
+        "name": { "$ref": "#/$defs/AnatomyText" },
+        "version": { "$ref": "#/$defs/AnatomyText" }
+      }
+    },
+    "AssetProvenance": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["pipeline", "pipelineVersion", "preparedAtUtc", "tools", "sources"],
+      "properties": {
+        "pipeline": { "const": "neuro-engine.anatomy.prepare" },
+        "pipelineVersion": { "$ref": "#/$defs/AnatomyText" },
+        "preparedAtUtc": {
+          "type": "string",
+          "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$"
+        },
+        "tools": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/ToolVersion" },
+          "maxItems": 16
+        },
+        "sources": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/SourceFile" },
+          "minItems": 1,
+          "maxItems": 256
+        }
+      }
+    },
+    "DataLicense": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "url", "attribution"],
+      "properties": {
+        "id": { "$ref": "#/$defs/AnatomyText" },
+        "url": { "type": "string", "pattern": "^https://[^\\s]{1,500}$" },
+        "attribution": { "$ref": "#/$defs/LongText" }
+      }
+    },
+    "AnatomyAsset": {
+      "title": "AnatomyAsset",
+      "description": "Manifest of one prepared cortical asset. Geometry is in millimetres in FreeSurfer surface RAS, unscaled and uncentred; render precision only (float32).",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "type",
+        "schemaVersion",
+        "assetId",
+        "subject",
+        "anatomyKind",
+        "acquisition",
+        "coordinateFrame",
+        "units",
+        "transforms",
+        "surfaces",
+        "parcellations",
+        "provenance",
+        "license"
+      ],
+      "properties": {
+        "type": { "const": "anatomy.asset" },
+        "schemaVersion": { "$ref": "#/$defs/AnatomySchemaVersion" },
+        "assetId": { "$ref": "#/$defs/AssetId" },
+        "subject": { "$ref": "#/$defs/SubjectRef" },
+        "anatomyKind": { "$ref": "#/$defs/AnatomyKind" },
+        "acquisition": { "$ref": "#/$defs/MriAcquisition" },
+        "coordinateFrame": { "const": "freesurfer-surface-ras" },
+        "units": { "const": "mm" },
+        "transforms": {
+          "description": "Transforms from the asset frame to other frames, when known.",
+          "type": "array",
+          "items": { "$ref": "#/$defs/CoordinateTransform" },
+          "maxItems": 8
+        },
+        "surfaces": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/SurfaceMesh" },
+          "minItems": 1,
+          "maxItems": 6
+        },
+        "parcellations": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/Parcellation" },
+          "maxItems": 16
+        },
+        "provenance": { "$ref": "#/$defs/AssetProvenance" },
+        "license": { "$ref": "#/$defs/DataLicense" }
+      }
+    },
+    "AssetSummary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["assetId", "subject", "anatomyKind", "surfaces", "atlases", "licenseId"],
+      "properties": {
+        "assetId": { "$ref": "#/$defs/AssetId" },
+        "subject": { "$ref": "#/$defs/SubjectRef" },
+        "anatomyKind": { "$ref": "#/$defs/AnatomyKind" },
+        "surfaces": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/SurfaceKind" },
+          "minItems": 1,
+          "maxItems": 3
+        },
+        "atlases": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/AnatomySlug" },
+          "maxItems": 16
+        },
+        "licenseId": { "$ref": "#/$defs/AnatomyText" }
+      }
+    },
+    "AnatomyCatalog": {
+      "title": "AnatomyCatalog",
+      "description": "Prepared assets available from this engine. defaultAssetId is the asset to show first (the fsaverage template when prepared), or null.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "schemaVersion", "defaultAssetId", "assets"],
+      "properties": {
+        "type": { "const": "anatomy.catalog" },
+        "schemaVersion": { "$ref": "#/$defs/AnatomySchemaVersion" },
+        "defaultAssetId": { "oneOf": [{ "$ref": "#/$defs/AssetId" }, { "type": "null" }] },
+        "assets": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/AssetSummary" },
+          "maxItems": 256
+        }
+      }
+    }
+  }
+}

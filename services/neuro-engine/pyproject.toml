@@ -6,6 +6,7 @@ readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
     "fastapi>=0.162.0",
+    "nibabel>=5.4.2",
     "numpy>=2.5.4",
     "pydantic>=2.14.2",
     "uvicorn[standard]>=0.54.0",
@@ -14,9 +15,20 @@ dependencies = [
 [project.scripts]
 neuro-engine = "neuro_engine:main"
 
+[project.optional-dependencies]
+neuroimaging = [
+    "mne>=1.13.2",
+    "mne-bids>=0.20.0",
+]
+
 [build-system]
 requires = ["uv_build>=0.13.6,<0.14.0"]
 build-backend = "uv_build"
+
+[tool.pytest.ini_options]
+# Integration tests need downloaded datasets (NEURO_ENGINE_DATA_DIR); run them with `nx run neuro-engine:test-integration`.
+addopts = "-m 'not integration'"
+markers = ["integration: needs real datasets under the data root; never runs in CI"]
 
 [dependency-groups]
 dev = [
