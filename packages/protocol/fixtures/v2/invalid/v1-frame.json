@@ -1,0 +1,15 @@
+{
+  "schemaVersion": 1,
+  "deviceId": "simulated-eeg",
+  "sequence": 0,
+  "timestampMs": 0,
+  "sampleRateHz": 125,
+  "channelLabels": [
+    "Fp1"
+  ],
+  "samplesUv": [
+    [
+      0.0
+    ]
+  ]
+}

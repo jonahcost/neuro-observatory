@@ -1,0 +1,22 @@
+{
+  "type": "eeg.block",
+  "schemaVersion": 2,
+  "streamId": "cyton-daisy-7",
+  "blockSequence": 3,
+  "firstSampleIndex": 15,
+  "sampleCount": 3,
+  "firstSampleTimeUs": 5120000,
+  "droppedSamplesBefore": 2,
+  "samples": [
+    [
+      1,
+      -2,
+      3
+    ],
+    [
+      0,
+      4,
+      -5
+    ]
+  ]
+}

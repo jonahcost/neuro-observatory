@@ -1,0 +1,18 @@
+{
+  "type": "stream.status",
+  "schemaVersion": 2,
+  "streamId": null,
+  "state": "reconnecting",
+  "atUs": 6000000,
+  "counters": {
+    "samplesAcquired": 1250,
+    "acquisitionGapSamples": 0,
+    "rejectedBlocks": 0,
+    "blocksDroppedForClient": 0,
+    "effectiveSampleRateHz": null
+  },
+  "error": {
+    "code": "device-disconnected",
+    "message": "Device disconnected; reconnecting"
+  }
+}

@@ -1,0 +1,42 @@
+{
+  "type": "stream.metadata",
+  "schemaVersion": 2,
+  "streamId": "cyton-daisy-7",
+  "device": {
+    "kind": "example-device",
+    "model": "Example 2ch",
+    "deviceId": "dev-01",
+    "adapterVersion": "0.1.0",
+    "firmwareVersion": "v3.1.2"
+  },
+  "provenance": {
+    "kind": "device"
+  },
+  "nominalSampleRateHz": 125,
+  "layout": "channel-major",
+  "channels": [
+    {
+      "index": 0,
+      "label": "C3",
+      "type": "EEG",
+      "unit": "uV",
+      "reference": "SRB2"
+    },
+    {
+      "index": 1,
+      "label": "C4",
+      "type": "EEG",
+      "unit": "uV",
+      "reference": "SRB2"
+    }
+  ],
+  "timebase": {
+    "clock": "engine-monotonic",
+    "unit": "us",
+    "timestampSource": "host-receipt-fitted",
+    "anchor": {
+      "monotonicUs": 5000000,
+      "unixTimeUs": 1793366580000000
+    }
+  }
+}

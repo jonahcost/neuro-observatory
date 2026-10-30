@@ -1,0 +1,11 @@
+{
+  "type": "eeg.block",
+  "schemaVersion": 2,
+  "streamId": "stream-0001",
+  "blockSequence": 0,
+  "firstSampleIndex": 0,
+  "sampleCount": 5,
+  "firstSampleTimeUs": 5000000,
+  "droppedSamplesBefore": 0,
+  "samples": []
+}

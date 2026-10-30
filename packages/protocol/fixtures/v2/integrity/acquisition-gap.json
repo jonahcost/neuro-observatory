@@ -1,0 +1,102 @@
+{
+  "description": "Device gap declared by droppedSamplesBefore",
+  "steps": [
+    {
+      "message": {
+        "type": "stream.metadata",
+        "schemaVersion": 2,
+        "streamId": "stream-0001",
+        "device": {
+          "kind": "synthetic",
+          "model": "neuro-observatory-synthetic-eeg",
+          "deviceId": "synthetic-0",
+          "adapterVersion": "1.0.0"
+        },
+        "provenance": {
+          "kind": "synthetic",
+          "generator": "neuro_engine.acquisition.synthetic",
+          "generatorVersion": "1",
+          "seed": 42,
+          "configHash": "sha256:abababababababababababababababababababababababababababababababab"
+        },
+        "nominalSampleRateHz": 125,
+        "layout": "channel-major",
+        "channels": [
+          {
+            "index": 0,
+            "label": "Cz",
+            "type": "EEG",
+            "unit": "uV",
+            "reference": "synthetic"
+          }
+        ],
+        "timebase": {
+          "clock": "engine-monotonic",
+          "unit": "us",
+          "timestampSource": "synthetic-nominal",
+          "anchor": {
+            "monotonicUs": 5000000,
+            "unixTimeUs": 1793366580000000
+          }
+        }
+      },
+      "expect": "new-stream"
+    },
+    {
+      "message": {
+        "type": "eeg.block",
+        "schemaVersion": 2,
+        "streamId": "stream-0001",
+        "blockSequence": 0,
+        "firstSampleIndex": 0,
+        "sampleCount": 5,
+        "firstSampleTimeUs": 5000000,
+        "droppedSamplesBefore": 0,
+        "samples": [
+          [
+            0.0,
+            9.635073,
+            16.886559,
+            19.960535,
+            18.096541
+          ]
+        ]
+      },
+      "expect": "accepted"
+    },
+    {
+      "message": {
+        "type": "eeg.block",
+        "schemaVersion": 2,
+        "streamId": "stream-0001",
+        "blockSequence": 1,
+        "firstSampleIndex": 8,
+        "sampleCount": 5,
+        "firstSampleTimeUs": 5064000,
+        "droppedSamplesBefore": 3,
+        "samples": [
+          [
+            -15.410265,
+            -19.645745,
+            -19.02113,
+            -13.690942,
+            -4.973798
+          ]
+        ]
+      },
+      "expect": "accepted"
+    }
+  ],
+  "expectedCounters": {
+    "streamsStarted": 1,
+    "blocksAccepted": 2,
+    "samplesAccepted": 10,
+    "acquisitionGapSamples": 3,
+    "transportDroppedBlocks": 0,
+    "transportGapSamples": 0,
+    "inconsistentBlocks": 0,
+    "duplicateBlocks": 0,
+    "outOfOrderBlocks": 0,
+    "unknownStreamBlocks": 0
+  }
+}

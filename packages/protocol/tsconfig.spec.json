@@ -1,0 +1,14 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "outDir": "../../dist/out-tsc",
+    "allowJs": true,
+    "types": ["node", "vitest"]
+  },
+  "include": [
+    "vitest.config.mts",
+    "src/**/*.ts",
+    "schemas/*.json",
+    "scripts/*.mjs"
+  ]
+}
