@@ -1,16 +1,31 @@
-export interface EEGFrame {
-  schemaVersion: 1;
-  deviceId: string;
-  sequence: number;
-  timestampMs: number;
-  sampleRateHz: number;
-  channelLabels: string[];
-  samplesUv: number[][];
-}
-
-export interface DeviceStatus {
-  deviceId: string;
-  connected: boolean;
-  channelCount: number;
-  sampleRateHz: number;
-}
+export type {
+  ChannelSpec,
+  ClockAnchor,
+  DeviceInfo,
+  DeviceProvenance,
+  EegBlock,
+  ServerMessage,
+  StreamCounters,
+  StreamError,
+  StreamMetadata,
+  StreamStatus,
+  SyntheticProvenance,
+  Timebase,
+} from './generated/eeg-stream.v2';
+export {
+  PROTOCOL_SCHEMA_VERSION,
+  parseServerMessage,
+  validateServerMessage,
+  type ParseContext,
+  type ParseError,
+  type ParseErrorKind,
+  type ParseResult,
+} from './validate';
+export {
+  StreamIntegrityTracker,
+  emptyIntegrityCounters,
+  sampleTimeUs,
+  type BlockVerdict,
+  type IntegrityCounters,
+  type MetadataVerdict,
+} from './integrity';

@@ -8,7 +8,7 @@
 | --- | --- | --- | --- |
 | `apps/desktop` | React/Vite/Three.js | UI, charts, 3D visual state | Raw acquisition, medical conclusions, session source of truth |
 | `services/neuro-engine` | Python/FastAPI/uv | Device adapters, DSP, recording, source estimates (as built) | GPU display code |
-| `packages/protocol` | TS bootstrap; evolve to neutral schema | Stable, versioned producer/consumer contract | Private samples or user data |
+| `packages/protocol` | JSON Schema (canonical) + TS validator/types; Python mirror in the engine | Stable, versioned producer/consumer contract and shared fixtures | Private samples or user data |
 | `pipelines/*` (future) | MRI/ML batch jobs | Reproducible reconstructions and training | Time-critical acquisition loop |
 | `hardware/*` (future) | CAD/PCB/firmware | Physical acquisition designs, simulator-only validation until safety clearance | Clinical-use certification claims |
 | `apps/hologram` (future) | Display adapter | Spatial renderer | Acquisition, source-estimation math |
@@ -16,6 +16,22 @@
 ## Canonical flow
 
 Physical or synthetic EEG -> device adapter -> immutable raw ring buffer / local recorder -> quality-aware DSP -> source model / inference -> versioned scene frame -> desktop or holographic adapter. Sensor synchronization and experiment markers use explicit timebase metadata. Replay uses the same ingestion interface.
+
+## Implemented acquisition path (Milestone 01A, ADR-0008)
+
+```text
+SyntheticEegAdapter (DeviceAdapter)          engine process, started by FastAPI lifespan
+  -> AcquisitionService   stream IDs, sample-index integrity, gap derivation, reconnect, counters
+  -> StreamHub            non-blocking publish; bounded queue per subscriber
+       |- live-view subscriber per WebSocket client (drop oldest + count)
+       '- lossless subscriber (reserved: recorder, 01B+) fails explicitly on overflow
+  -> /ws/v2/eeg           protocol v2 JSON (stream.metadata, eeg.block, stream.status), Origin allowlist, 127.0.0.1
+  -> EegStreamClient      desktop; validates every message, integrity tracker, reconnect/stale/incompatible states
+       |- onBlock()       sample consumers (future waveform ring buffer); never React state
+       '- snapshot        throttled status for React (useSyncExternalStore)
+```
+
+Acquisition runs whether or not any client is connected. Recording, replay, DSP and the waveform buffer are not implemented yet; their seams are the lossless `StreamHub` subscription, the `DeviceAdapter` protocol, and `EegStreamClient.onBlock`. The wire contract is documented in [`packages/protocol/README.md`](../../packages/protocol/README.md).
 
 ## Non-functional requirements
 

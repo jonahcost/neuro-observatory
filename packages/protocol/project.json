@@ -1,0 +1,29 @@
+{
+  "name": "@neuro-observatory/protocol",
+  "$schema": "../../node_modules/nx/schemas/project-schema.json",
+  "sourceRoot": "packages/protocol/src",
+  "projectType": "library",
+  "tags": [],
+  "targets": {
+    "typecheck": {
+      "options": {
+        "command": "tsc -p tsconfig.lib.json --noEmit && tsc -p tsconfig.spec.json --noEmit"
+      }
+    },
+    "generate-types": {
+      "executor": "nx:run-commands",
+      "options": {
+        "cwd": "packages/protocol",
+        "command": "node scripts/generate-types.mjs"
+      },
+      "cache": false
+    },
+    "check-generated": {
+      "executor": "nx:run-commands",
+      "options": {
+        "cwd": "packages/protocol",
+        "command": "node scripts/generate-types.mjs --check"
+      }
+    }
+  }
+}

@@ -1,0 +1,18 @@
+{
+  "type": "stream.status",
+  "schemaVersion": 2,
+  "streamId": "stream-0001",
+  "state": "streaming",
+  "atUs": 6000000,
+  "counters": {
+    "samplesAcquired": 1250,
+    "acquisitionGapSamples": 0,
+    "rejectedBlocks": 0,
+    "blocksDroppedForClient": 0,
+    "effectiveSampleRateHz": 124.97
+  },
+  "error": {
+    "code": "Bad Code",
+    "message": "x"
+  }
+}

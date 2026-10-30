@@ -2,6 +2,7 @@
   "name": "neuro-engine",
   "projectType": "application",
   "sourceRoot": "services/neuro-engine/src",
+  "implicitDependencies": ["@neuro-observatory/protocol"],
   "targets": {
     "serve": {
       "executor": "nx:run-commands",
@@ -13,6 +14,11 @@
     },
     "test": {
       "executor": "nx:run-commands",
+      "inputs": [
+        "default",
+        "{workspaceRoot}/packages/protocol/schemas/**/*",
+        "{workspaceRoot}/packages/protocol/fixtures/**/*"
+      ],
       "options": {
         "cwd": "services/neuro-engine",
         "command": "uv run pytest"

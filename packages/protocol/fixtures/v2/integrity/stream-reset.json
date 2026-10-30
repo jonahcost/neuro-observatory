@@ -1,0 +1,250 @@
+{
+  "description": "New metadata starts a new stream; blocks of other streams are rejected",
+  "steps": [
+    {
+      "message": {
+        "type": "eeg.block",
+        "schemaVersion": 2,
+        "streamId": "stream-0001",
+        "blockSequence": 0,
+        "firstSampleIndex": 0,
+        "sampleCount": 5,
+        "firstSampleTimeUs": 5000000,
+        "droppedSamplesBefore": 0,
+        "samples": [
+          [
+            0.0,
+            9.635073,
+            16.886559,
+            19.960535,
+            18.096541
+          ]
+        ]
+      },
+      "expect": "unknown-stream"
+    },
+    {
+      "message": {
+        "type": "stream.metadata",
+        "schemaVersion": 2,
+        "streamId": "stream-0001",
+        "device": {
+          "kind": "synthetic",
+          "model": "neuro-observatory-synthetic-eeg",
+          "deviceId": "synthetic-0",
+          "adapterVersion": "1.0.0"
+        },
+        "provenance": {
+          "kind": "synthetic",
+          "generator": "neuro_engine.acquisition.synthetic",
+          "generatorVersion": "1",
+          "seed": 42,
+          "configHash": "sha256:abababababababababababababababababababababababababababababababab"
+        },
+        "nominalSampleRateHz": 125,
+        "layout": "channel-major",
+        "channels": [
+          {
+            "index": 0,
+            "label": "Cz",
+            "type": "EEG",
+            "unit": "uV",
+            "reference": "synthetic"
+          }
+        ],
+        "timebase": {
+          "clock": "engine-monotonic",
+          "unit": "us",
+          "timestampSource": "synthetic-nominal",
+          "anchor": {
+            "monotonicUs": 5000000,
+            "unixTimeUs": 1793366580000000
+          }
+        }
+      },
+      "expect": "new-stream"
+    },
+    {
+      "message": {
+        "type": "eeg.block",
+        "schemaVersion": 2,
+        "streamId": "stream-0001",
+        "blockSequence": 0,
+        "firstSampleIndex": 0,
+        "sampleCount": 5,
+        "firstSampleTimeUs": 5000000,
+        "droppedSamplesBefore": 0,
+        "samples": [
+          [
+            0.0,
+            9.635073,
+            16.886559,
+            19.960535,
+            18.096541
+          ]
+        ]
+      },
+      "expect": "accepted"
+    },
+    {
+      "message": {
+        "type": "stream.metadata",
+        "schemaVersion": 2,
+        "streamId": "stream-0001",
+        "device": {
+          "kind": "synthetic",
+          "model": "neuro-observatory-synthetic-eeg",
+          "deviceId": "synthetic-0",
+          "adapterVersion": "1.0.0"
+        },
+        "provenance": {
+          "kind": "synthetic",
+          "generator": "neuro_engine.acquisition.synthetic",
+          "generatorVersion": "1",
+          "seed": 42,
+          "configHash": "sha256:abababababababababababababababababababababababababababababababab"
+        },
+        "nominalSampleRateHz": 125,
+        "layout": "channel-major",
+        "channels": [
+          {
+            "index": 0,
+            "label": "Cz",
+            "type": "EEG",
+            "unit": "uV",
+            "reference": "synthetic"
+          }
+        ],
+        "timebase": {
+          "clock": "engine-monotonic",
+          "unit": "us",
+          "timestampSource": "synthetic-nominal",
+          "anchor": {
+            "monotonicUs": 5000000,
+            "unixTimeUs": 1793366580000000
+          }
+        }
+      },
+      "expect": "same-stream"
+    },
+    {
+      "message": {
+        "type": "eeg.block",
+        "schemaVersion": 2,
+        "streamId": "stream-0001",
+        "blockSequence": 1,
+        "firstSampleIndex": 5,
+        "sampleCount": 5,
+        "firstSampleTimeUs": 5040000,
+        "droppedSamplesBefore": 0,
+        "samples": [
+          [
+            11.755705,
+            2.506665,
+            -7.362491,
+            -15.410265,
+            -19.645745
+          ]
+        ]
+      },
+      "expect": "accepted"
+    },
+    {
+      "message": {
+        "type": "stream.metadata",
+        "schemaVersion": 2,
+        "streamId": "stream-0002",
+        "device": {
+          "kind": "synthetic",
+          "model": "neuro-observatory-synthetic-eeg",
+          "deviceId": "synthetic-0",
+          "adapterVersion": "1.0.0"
+        },
+        "provenance": {
+          "kind": "synthetic",
+          "generator": "neuro_engine.acquisition.synthetic",
+          "generatorVersion": "1",
+          "seed": 42,
+          "configHash": "sha256:abababababababababababababababababababababababababababababababab"
+        },
+        "nominalSampleRateHz": 125,
+        "layout": "channel-major",
+        "channels": [
+          {
+            "index": 0,
+            "label": "Cz",
+            "type": "EEG",
+            "unit": "uV",
+            "reference": "synthetic"
+          }
+        ],
+        "timebase": {
+          "clock": "engine-monotonic",
+          "unit": "us",
+          "timestampSource": "synthetic-nominal",
+          "anchor": {
+            "monotonicUs": 5000000,
+            "unixTimeUs": 1793366580000000
+          }
+        }
+      },
+      "expect": "new-stream"
+    },
+    {
+      "message": {
+        "type": "eeg.block",
+        "schemaVersion": 2,
+        "streamId": "stream-0001",
+        "blockSequence": 2,
+        "firstSampleIndex": 10,
+        "sampleCount": 5,
+        "firstSampleTimeUs": 5080000,
+        "droppedSamplesBefore": 0,
+        "samples": [
+          [
+            -19.02113,
+            -13.690942,
+            -4.973798,
+            4.973798,
+            13.690942
+          ]
+        ]
+      },
+      "expect": "unknown-stream"
+    },
+    {
+      "message": {
+        "type": "eeg.block",
+        "schemaVersion": 2,
+        "streamId": "stream-0002",
+        "blockSequence": 0,
+        "firstSampleIndex": 0,
+        "sampleCount": 5,
+        "firstSampleTimeUs": 5000000,
+        "droppedSamplesBefore": 0,
+        "samples": [
+          [
+            0.0,
+            9.635073,
+            16.886559,
+            19.960535,
+            18.096541
+          ]
+        ]
+      },
+      "expect": "accepted"
+    }
+  ],
+  "expectedCounters": {
+    "streamsStarted": 2,
+    "blocksAccepted": 3,
+    "samplesAccepted": 15,
+    "acquisitionGapSamples": 0,
+    "transportDroppedBlocks": 0,
+    "transportGapSamples": 0,
+    "inconsistentBlocks": 0,
+    "duplicateBlocks": 0,
+    "outOfOrderBlocks": 0,
+    "unknownStreamBlocks": 2
+  }
+}

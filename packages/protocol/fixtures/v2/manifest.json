@@ -1,0 +1,179 @@
+{
+  "description": "Protocol v2 contract fixtures. Every consumer and producer implementation must classify each file as `expect`. `context` names the active stream metadata.",
+  "expectValues": [
+    "valid",
+    "json",
+    "schema",
+    "unsupported-version",
+    "semantic"
+  ],
+  "cases": [
+    {
+      "file": "valid/metadata-synthetic-16ch.json",
+      "expect": "valid",
+      "description": "Synthetic 16-channel 125 Hz stream metadata"
+    },
+    {
+      "file": "valid/metadata-device-2ch.json",
+      "expect": "valid",
+      "description": "Physical-device metadata with firmware version and fitted host timestamps"
+    },
+    {
+      "file": "valid/block-16ch.json",
+      "expect": "valid",
+      "description": "16 x 5 channel-major block matching its metadata",
+      "context": "valid/metadata-synthetic-16ch.json"
+    },
+    {
+      "file": "valid/block-2ch-integer-values.json",
+      "expect": "valid",
+      "description": "Integer-valued samples are valid JSON numbers",
+      "context": "valid/metadata-device-2ch.json"
+    },
+    {
+      "file": "valid/status-streaming.json",
+      "expect": "valid",
+      "description": "Streaming status with counters"
+    },
+    {
+      "file": "valid/status-reconnecting-error.json",
+      "expect": "valid",
+      "description": "Status without an open stream, with an error and unknown rate"
+    },
+    {
+      "file": "invalid/not-json.txt",
+      "expect": "json",
+      "description": "Truncated JSON text"
+    },
+    {
+      "file": "invalid/not-object.json",
+      "expect": "schema",
+      "description": "Top-level JSON array"
+    },
+    {
+      "file": "invalid/unknown-type.json",
+      "expect": "schema",
+      "description": "Unknown message type"
+    },
+    {
+      "file": "invalid/v1-frame.json",
+      "expect": "unsupported-version",
+      "description": "Retired protocol v1 frame"
+    },
+    {
+      "file": "invalid/block-unsupported-version.json",
+      "expect": "unsupported-version",
+      "description": "Block from a future protocol version"
+    },
+    {
+      "file": "invalid/block-missing-schema-version.json",
+      "expect": "schema",
+      "description": "Block without schemaVersion"
+    },
+    {
+      "file": "invalid/metadata-missing-unit.json",
+      "expect": "schema",
+      "description": "Channel without a unit"
+    },
+    {
+      "file": "invalid/metadata-unsupported-unit.json",
+      "expect": "schema",
+      "description": "Channel unit outside the declared set"
+    },
+    {
+      "file": "invalid/metadata-wrong-layout.json",
+      "expect": "schema",
+      "description": "Sample-major layout is not part of v2"
+    },
+    {
+      "file": "invalid/metadata-zero-rate.json",
+      "expect": "schema",
+      "description": "Sampling rate must be positive"
+    },
+    {
+      "file": "invalid/metadata-synthetic-without-seed.json",
+      "expect": "schema",
+      "description": "Synthetic provenance must identify generator, seed and config"
+    },
+    {
+      "file": "invalid/metadata-duplicate-labels.json",
+      "expect": "semantic",
+      "description": "Channel labels must be unique"
+    },
+    {
+      "file": "invalid/metadata-index-mismatch.json",
+      "expect": "semantic",
+      "description": "Channel index must equal its position"
+    },
+    {
+      "file": "invalid/block-ragged-rows.json",
+      "expect": "semantic",
+      "description": "Every channel row must have sampleCount samples",
+      "context": "valid/metadata-synthetic-16ch.json"
+    },
+    {
+      "file": "invalid/block-sample-count-mismatch.json",
+      "expect": "semantic",
+      "description": "sampleCount disagrees with row lengths",
+      "context": "valid/metadata-synthetic-16ch.json"
+    },
+    {
+      "file": "invalid/block-channel-count-mismatch.json",
+      "expect": "semantic",
+      "description": "Row count must equal the metadata channel count",
+      "context": "valid/metadata-synthetic-16ch.json"
+    },
+    {
+      "file": "invalid/block-stream-mismatch.json",
+      "expect": "semantic",
+      "description": "Block for a stream other than the active metadata",
+      "context": "valid/metadata-synthetic-16ch.json"
+    },
+    {
+      "file": "invalid/block-negative-index.json",
+      "expect": "schema",
+      "description": "Negative sample index"
+    },
+    {
+      "file": "invalid/block-fractional-index.json",
+      "expect": "schema",
+      "description": "Fractional sample index"
+    },
+    {
+      "file": "invalid/block-string-sample.json",
+      "expect": "schema",
+      "description": "String in place of a sample value"
+    },
+    {
+      "file": "invalid/block-null-sample.json",
+      "expect": "schema",
+      "description": "Null in place of a sample (gaps are never encoded as values)"
+    },
+    {
+      "file": "invalid/block-extra-field.json",
+      "expect": "schema",
+      "description": "Unknown fields are rejected"
+    },
+    {
+      "file": "invalid/block-empty-samples.json",
+      "expect": "schema",
+      "description": "Block without channels"
+    },
+    {
+      "file": "invalid/block-non-finite-sample.json",
+      "expect": "semantic",
+      "description": "Number that overflows to Infinity when parsed",
+      "context": "valid/metadata-synthetic-16ch.json"
+    },
+    {
+      "file": "invalid/status-unknown-state.json",
+      "expect": "schema",
+      "description": "Unknown acquisition state"
+    },
+    {
+      "file": "invalid/status-bad-error-code.json",
+      "expect": "schema",
+      "description": "Error code must be kebab-case"
+    }
+  ]
+}

@@ -1,0 +1,143 @@
+{
+  "type": "stream.metadata",
+  "schemaVersion": 2,
+  "streamId": "stream-0001",
+  "device": {
+    "kind": "synthetic",
+    "model": "neuro-observatory-synthetic-eeg",
+    "deviceId": "synthetic-0",
+    "adapterVersion": "1.0.0"
+  },
+  "provenance": {
+    "kind": "synthetic",
+    "generator": "neuro_engine.acquisition.synthetic",
+    "generatorVersion": "1",
+    "seed": 42,
+    "configHash": "sha256:abababababababababababababababababababababababababababababababab"
+  },
+  "nominalSampleRateHz": 0,
+  "layout": "channel-major",
+  "channels": [
+    {
+      "index": 0,
+      "label": "Fp1",
+      "type": "EEG",
+      "unit": "uV",
+      "reference": "synthetic"
+    },
+    {
+      "index": 1,
+      "label": "Fp2",
+      "type": "EEG",
+      "unit": "uV",
+      "reference": "synthetic"
+    },
+    {
+      "index": 2,
+      "label": "F3",
+      "type": "EEG",
+      "unit": "uV",
+      "reference": "synthetic"
+    },
+    {
+      "index": 3,
+      "label": "F4",
+      "type": "EEG",
+      "unit": "uV",
+      "reference": "synthetic"
+    },
+    {
+      "index": 4,
+      "label": "F7",
+      "type": "EEG",
+      "unit": "uV",
+      "reference": "synthetic"
+    },
+    {
+      "index": 5,
+      "label": "F8",
+      "type": "EEG",
+      "unit": "uV",
+      "reference": "synthetic"
+    },
+    {
+      "index": 6,
+      "label": "C3",
+      "type": "EEG",
+      "unit": "uV",
+      "reference": "synthetic"
+    },
+    {
+      "index": 7,
+      "label": "C4",
+      "type": "EEG",
+      "unit": "uV",
+      "reference": "synthetic"
+    },
+    {
+      "index": 8,
+      "label": "Cz",
+      "type": "EEG",
+      "unit": "uV",
+      "reference": "synthetic"
+    },
+    {
+      "index": 9,
+      "label": "P3",
+      "type": "EEG",
+      "unit": "uV",
+      "reference": "synthetic"
+    },
+    {
+      "index": 10,
+      "label": "P4",
+      "type": "EEG",
+      "unit": "uV",
+      "reference": "synthetic"
+    },
+    {
+      "index": 11,
+      "label": "T7",
+      "type": "EEG",
+      "unit": "uV",
+      "reference": "synthetic"
+    },
+    {
+      "index": 12,
+      "label": "T8",
+      "type": "EEG",
+      "unit": "uV",
+      "reference": "synthetic"
+    },
+    {
+      "index": 13,
+      "label": "O1",
+      "type": "EEG",
+      "unit": "uV",
+      "reference": "synthetic"
+    },
+    {
+      "index": 14,
+      "label": "O2",
+      "type": "EEG",
+      "unit": "uV",
+      "reference": "synthetic"
+    },
+    {
+      "index": 15,
+      "label": "Pz",
+      "type": "EEG",
+      "unit": "uV",
+      "reference": "synthetic"
+    }
+  ],
+  "timebase": {
+    "clock": "engine-monotonic",
+    "unit": "us",
+    "timestampSource": "synthetic-nominal",
+    "anchor": {
+      "monotonicUs": 5000000,
+      "unixTimeUs": 1793366580000000
+    }
+  }
+}
