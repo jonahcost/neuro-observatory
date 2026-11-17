@@ -2,7 +2,7 @@ import { memo, useEffect, useId, useMemo, useState } from 'react';
 import { Canvas, useThree } from '@react-three/fiber';
 import { OrbitControls } from '@react-three/drei';
 import type { AnatomyAsset, AnatomyKind, SurfaceKind } from '@neuro-observatory/protocol';
-import type { ChannelActivity, ActivityDisplay } from '../stream/channelActivity';
+import { RMS_FULL_SCALE_UV, type ActivityDisplay, type ChannelActivity } from '../stream/channelActivity';
 import { BrainShell } from './BrainShell';
 import type { AnatomyClient, LoadedSurface } from './anatomyClient';
 import { RENDER_PRESETS, presetLabel, type RenderPresetId } from './renderPresets';
@@ -171,11 +171,17 @@ function AnatomyControls({
   );
 }
 
-function useCompanionSurface(client: AnatomyClient, asset: AnatomyAsset | null, kind: SurfaceKind | null): LoadedSurface[] | null {
+function useCompanionSurface(
+  client: AnatomyClient,
+  asset: AnatomyAsset | null,
+  kind: SurfaceKind | null,
+): { surfaces: LoadedSurface[] | null; failed: boolean } {
   const [value, setValue] = useState<LoadedSurface[] | null>(null);
+  const [failed, setFailed] = useState(false);
   useEffect(() => {
     if (asset === null || kind === null) {
       setValue(null);
+      setFailed(false);
       return;
     }
     const controller = new AbortController();
@@ -184,11 +190,13 @@ function useCompanionSurface(client: AnatomyClient, asset: AnatomyAsset | null, 
       (surfaces) => {
         if (!cancelled) {
           setValue(surfaces);
+          setFailed(false);
         }
       },
       () => {
         if (!cancelled) {
           setValue(null);
+          setFailed(true);
         }
       },
     );
@@ -197,7 +205,7 @@ function useCompanionSurface(client: AnatomyClient, asset: AnatomyAsset | null, 
       controller.abort();
     };
   }, [client, asset, kind]);
-  return value;
+  return { surfaces: value, failed };
 }
 
 export const AnatomyViewer = memo(function AnatomyViewer({
@@ -230,7 +238,8 @@ export const AnatomyViewer = memo(function AnatomyViewer({
   const atlasDescription = parcellations?.[0]?.description;
   const wantWhite =
     preset === 'holographic' && view.surfaceKind === 'pial' && asset !== null && asset.surfaces.some((surface) => surface.surface === 'white');
-  const innerSurfaces = useCompanionSurface(client, wantWhite ? asset : null, wantWhite ? 'white' : null);
+  const companion = useCompanionSurface(client, wantWhite ? asset : null, wantWhite ? 'white' : null);
+  const innerSurfaces = companion.surfaces;
   const labelKey = [...highlight.byLabel.keys()].join('\n');
   const channelLabels = useMemo(() => (labelKey === '' ? [] : labelKey.split('\n')), [labelKey]);
   const unmapped = unmappedTemplateLabels(channelLabels);
@@ -247,10 +256,16 @@ export const AnatomyViewer = memo(function AnatomyViewer({
         onPathway={setShowPathway}
       />
       <p data-testid="sensor-highlight-status" style={{ margin: 0 }}>
-        Sensor highlights: {highlight.health}
+        Sensor highlights: {highlight.error ? `unavailable. ${highlight.error}` : highlight.health}
+        {highlight.missingSamples > 0 ? `. The last 1 s is missing ${highlight.missingSamples} samples.` : ''}
         {unmapped.length > 0 ? `. Unmapped channels: ${unmapped.join(', ')}` : ''}
       </p>
-      <p style={{ margin: 0 }}>Interior test marker — display probe, not anatomy.</p>
+      {showMarker ? <p style={{ margin: 0 }}>Interior test marker — display probe, not anatomy.</p> : null}
+      {companion.failed ? (
+        <p style={{ margin: 0 }}>
+          The white-matter surface did not load. The inner shell is a scaled copy of the displayed surface, not the white-matter boundary.
+        </p>
+      ) : null}
       {showPathway ? <p style={{ margin: 0 }}>Pathway layer on — no pulses in this slice.</p> : null}
 
       <div role="region" aria-label="Brain scene" style={{ height: '55vh', position: 'relative', background: '#05070f', borderRadius: 6 }}>
@@ -324,8 +339,9 @@ export const AnatomyViewer = memo(function AnatomyViewer({
           </dd>
           <dt>Activity</dt>
           <dd data-testid="activity-overlay">
-            Sensor-space highlights on template 10-20 display positions. These are template display positions, not registered
-            electrodes and not a source estimate.
+            Sensor-space highlights are the one-second RMS of accepted samples, in µV, drawn against a {RMS_FULL_SCALE_UV} µV
+            display scale. Missing samples in that second are left out of the mean. These are template display positions, not
+            registered electrodes and not a source estimate.
             {highlight.synthetic ? ' Synthetic streams are generated, not measured.' : ''}
           </dd>
           <dt>License</dt>

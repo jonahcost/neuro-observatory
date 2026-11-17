@@ -1,5 +1,3 @@
-import type { Vec3 } from './sceneGeometry';
-
 export interface LineMesh {
   positions: Float32Array;
   indices: Uint32Array;
@@ -141,9 +139,4 @@ export function meshEdgeStats(positions: Float32Array, indices: Uint32Array): Ed
   }
   lengths.sort((p, q) => p - q);
   return { uniqueEdges: lengths.length, medianMm: lengths[(lengths.length - 1) >> 1] as number };
-}
-
-/** Bounds centre in the same coordinates as `positions`. */
-export function boundsCentre(min: Vec3, max: Vec3): Vec3 {
-  return [(min[0] + max[0]) / 2, (min[1] + max[1]) / 2, (min[2] + max[2]) / 2];
 }

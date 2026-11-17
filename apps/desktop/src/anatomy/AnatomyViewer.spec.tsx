@@ -31,15 +31,20 @@ function setup(catalogOverride?: string, before?: (engine: ReturnType<typeof fak
 }
 
 describe('AnatomyViewer', () => {
-  it('shows the default template with its provenance and no activity claim', async () => {
+  it('shows the default template with its provenance and a sensor-space activity caption', async () => {
     setup();
     expect(screen.getByRole('status').textContent).toContain('Loading');
     await waitFor(() => expect(screen.getByTestId('scene')).toBeTruthy());
     expect(screen.getByTestId('anatomy-kind').textContent).toContain('Template anatomy');
-    expect(screen.getByTestId('activity-overlay').textContent).toContain('template 10-20 display positions');
+    expect(screen.getByTestId('activity-overlay').textContent).toContain('template display positions');
     expect(screen.getByTestId('activity-overlay').textContent).toContain('not a source estimate');
+    expect(screen.getByTestId('activity-overlay').textContent).toContain('one-second RMS');
+    expect(screen.getByTestId('activity-overlay').textContent).toContain('30 µV');
     expect(screen.getByTestId('sensor-highlight-status').textContent).toContain('waiting');
     expect((screen.getByLabelText('Interior test marker') as HTMLInputElement).checked).toBe(true);
+    expect(screen.getByText(/display probe, not anatomy/)).toBeTruthy();
+    fireEvent.click(screen.getByLabelText('Interior test marker'));
+    expect(screen.queryByText(/display probe, not anatomy/)).toBeNull();
     expect(screen.getByText(/Population template/)).toBeTruthy();
     const subject = screen.getByLabelText(/Subject/) as HTMLSelectElement;
     expect(subject.value).toBe('fsaverage-0001');
@@ -118,5 +123,24 @@ describe('AnatomyViewer', () => {
     expect(screen.getByTestId('scene')).toBeTruthy();
     fireEvent.click(screen.getByLabelText('Pathway layer'));
     expect(screen.getByText(/no pulses in this slice/)).toBeTruthy();
+  });
+
+  it('says when the holographic white-matter surface fails to load', async () => {
+    const template = makeFakeAsset({
+      assetId: 'fsaverage-0001',
+      kind: 'template',
+      displayName: 'fsaverage template',
+      hash,
+      atlas: true,
+      surfaces: ['pial', 'white', 'inflated'],
+    });
+    const engine = fakeAnatomyEngine(BASE, catalogFor([template], template.asset.assetId), [template]);
+    engine.override.set('/assets/fsaverage-0001/files/lh.white.positions.f32', { status: 404, body: 'missing' });
+    const client = createAnatomyClient({ baseUrl: BASE, fetchImpl: engine.fetchImpl, sha256: async (b) => hash(new Uint8Array(b)) });
+    render(<AnatomyViewer client={client} activity={new ChannelActivity()} />);
+    await waitFor(() => expect(screen.getByTestId('scene')).toBeTruthy());
+    fireEvent.change(screen.getByLabelText('Rendering'), { target: { value: 'holographic' } });
+    await waitFor(() => expect(screen.getByText(/white-matter surface did not load/)).toBeTruthy());
+    expect(screen.getByText(/scaled copy of the displayed surface/)).toBeTruthy();
   });
 });

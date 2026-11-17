@@ -3,7 +3,8 @@ import type { Hemisphere } from '@neuro-observatory/protocol';
 /**
  * Integration boundary for future per-vertex values drawn on a cortical surface
  * (see docs/architecture/ANATOMY.md, "Overlay contract"). Nothing produces
- * overlays yet: the viewer shows anatomy only.
+ * overlays yet. Sensor-space electrode highlights are a separate display and are
+ * not per-vertex cortical values.
  *
  * - `synthetic`: generated test values; never derived from a person.
  * - `estimate`: a model-derived source estimate from measured EEG. It is an

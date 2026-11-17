@@ -3,7 +3,7 @@ import type { Vec3 } from './sceneGeometry';
 /**
  * Unit-sphere 10-20 directions for the 16 synthetic labels.
  *
- * Transcribed from Kayser and Tenke, Psychophysiology 2006, Table A1.
+ * Transcribed from Kayser and Tenke, Clinical Neurophysiology 2006;117(2):348–368, Table A1.
  * That table is the spherical model of the international 10-20 percentage
  * arcs (Oostenveld and Praamstra 2001): +x through T8, +y through Fpz,
  * +z through Cz. Those axes match surface RAS (+x right, +y anterior,
@@ -14,7 +14,7 @@ import type { Vec3 } from './sceneGeometry';
  * They are not digitized positions for fsaverage or ds000248.
  */
 export const TEMPLATE_1020_CITATION =
-  'Kayser & Tenke 2006, Table A1 (spherical 10-20; Oostenveld & Praamstra 2001). Relative head-surface layout, not a subject registration (Jurcak, Tsuzuki & Dan 2007).';
+  'Kayser & Tenke 2006, Clin Neurophysiol 117:348–368, Table A1 (spherical 10-20; Oostenveld & Praamstra 2001). Relative head-surface layout, not a subject registration (Jurcak, Tsuzuki & Dan 2007).';
 
 export const TEMPLATE_1020_UNIT: Readonly<Record<string, Vec3>> = {
   Fp1: [-0.30902, 0.95106, 0],

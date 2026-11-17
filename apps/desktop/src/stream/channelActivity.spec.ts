@@ -27,16 +27,23 @@ function metadata(streamId: string, labels: readonly string[], rateHz: number): 
   };
 }
 
-function block(streamId: string, rows: readonly (readonly number[])[], sequence: number): EegBlock {
+function block(
+  streamId: string,
+  rows: readonly (readonly number[])[],
+  sequence: number,
+  overrides: Partial<Pick<EegBlock, 'firstSampleIndex' | 'firstSampleTimeUs' | 'droppedSamplesBefore'>> = {},
+): EegBlock {
+  const sampleCount = rows[0]?.length ?? 0;
+  const firstSampleIndex = overrides.firstSampleIndex ?? sequence * sampleCount;
   return {
     type: 'eeg.block',
     schemaVersion: 2,
     streamId,
     blockSequence: sequence,
-    firstSampleIndex: sequence * (rows[0]?.length ?? 0),
-    sampleCount: rows[0]?.length ?? 0,
-    firstSampleTimeUs: 0,
-    droppedSamplesBefore: 0,
+    firstSampleIndex,
+    sampleCount,
+    firstSampleTimeUs: overrides.firstSampleTimeUs ?? firstSampleIndex * 1_000_000,
+    droppedSamplesBefore: overrides.droppedSamplesBefore ?? 0,
     samples: rows.map((row) => [...row]),
   };
 }
@@ -94,5 +101,88 @@ describe('channel activity', () => {
     expect(atStale).toBeCloseTo(15 / RMS_FULL_SCALE_UV);
     expect(later).toBeCloseTo(atStale * Math.exp(-1));
     expect(later).toBeLessThan(atStale);
+  });
+
+  it('lets an index gap age samples out of the one-second window', () => {
+    const activity = new ChannelActivity();
+    activity.noteStream({ health: 'live', connection: 'open' }, 0);
+    const meta = metadata('stream-a', ['Cz'], 125);
+    activity.append(block('stream-a', [fill(100, 50)], 0, { firstSampleIndex: 0 }), meta, 0);
+    activity.append(
+      block('stream-a', [fill(25, 0)], 1, { firstSampleIndex: 200, droppedSamplesBefore: 100 }),
+      meta,
+      1_000,
+    );
+    const atPublish = activity.sampleDisplay(1_000);
+    const settled = activity.sampleDisplay(2_000);
+    expect(atPublish.byLabel.get('Cz')?.rmsUv).toBeCloseTo(50);
+    expect(atPublish.missingSamples).toBe(0);
+    expect(settled.byLabel.get('Cz')?.rmsUv).toBe(0);
+    expect(settled.missingSamples).toBe(100);
+    expect(settled.health).toBe('live');
+    expect(settled.error).toBeNull();
+  });
+
+  it('does not invent time when droppedSamplesBefore exceeds the index gap', () => {
+    const activity = new ChannelActivity();
+    activity.noteStream({ health: 'live', connection: 'open' }, 0);
+    const meta = metadata('stream-a', ['Cz'], 4);
+    activity.append(block('stream-a', [[10, 10, 10, 10]], 0), meta, 0);
+    activity.append(block('stream-a', [[0]], 1, { firstSampleIndex: 4, droppedSamplesBefore: 10 }), meta, ACTIVITY_UPDATE_INTERVAL_MS);
+    const settled = activity.sampleDisplay(ACTIVITY_UPDATE_INTERVAL_MS * 2);
+    expect(settled.missingSamples).toBe(0);
+    expect(settled.byLabel.get('Cz')?.rmsUv).toBeCloseTo(Math.sqrt(75));
+  });
+
+  it('keeps only the unseen tail of an overlapping block', () => {
+    const activity = new ChannelActivity();
+    activity.noteStream({ health: 'live', connection: 'open' }, 0);
+    const meta = metadata('stream-a', ['Cz'], 4);
+    activity.append(block('stream-a', [[10, 10, 10, 30]], 0), meta, 0);
+    activity.append(block('stream-a', [[1, 1, 0, 0]], 1, { firstSampleIndex: 2 }), meta, ACTIVITY_UPDATE_INTERVAL_MS);
+    const settled = activity.sampleDisplay(ACTIVITY_UPDATE_INTERVAL_MS * 2);
+    expect(settled.byLabel.get('Cz')?.rmsUv).toBeCloseTo(Math.sqrt(250));
+    expect(settled.missingSamples).toBe(0);
+  });
+
+  it('drops the window when the reference or provenance changes', () => {
+    const activity = new ChannelActivity();
+    activity.noteStream({ health: 'live', connection: 'open' }, 0);
+    const first = metadata('stream-a', ['Cz'], 4);
+    activity.append(block('stream-a', [[10, 10]], 0), first, 0);
+    const next = metadata('stream-a', ['Cz'], 4);
+    next.channels[0] = { index: 0, label: 'Cz', type: 'EEG', unit: 'uV', reference: 'linked-ears' };
+    next.provenance = { kind: 'device' };
+    activity.append(block('stream-a', [[0, 0]], 1, { firstSampleIndex: 2 }), next, 1_000);
+    const display = activity.sampleDisplay(1_000);
+    expect(display.synthetic).toBe(false);
+    expect(display.byLabel.get('Cz')?.rmsUv).toBe(0);
+    expect(display.missingSamples).toBe(0);
+  });
+
+  it('clears the window when the source clock jumps backwards', () => {
+    const activity = new ChannelActivity();
+    activity.noteStream({ health: 'live', connection: 'open' }, 0);
+    const meta = metadata('stream-a', ['Cz'], 4);
+    activity.append(block('stream-a', [[10, 10, 10, 10]], 0, { firstSampleTimeUs: 1_000_000 }), meta, 0);
+    activity.append(block('stream-a', [[0, 0]], 1, { firstSampleIndex: 0, firstSampleTimeUs: 0 }), meta, 1_000);
+    const display = activity.sampleDisplay(1_000);
+    expect(display.byLabel.get('Cz')?.rmsUv).toBe(0);
+    expect(display.synthetic).toBe(true);
+  });
+
+  it('clears the previous highlight when the stream exceeds the viewer cap', () => {
+    const activity = new ChannelActivity();
+    activity.noteStream({ health: 'live', connection: 'open' }, 0);
+    const meta = metadata('stream-a', ['Cz'], 4);
+    activity.append(block('stream-a', [[40, 40, 40, 40]], 0), meta, 0);
+    const labels = Array.from({ length: 80 }, (_, index) => `Ch${index}`);
+    const big = metadata('stream-b', labels, 4);
+    activity.append(block('stream-b', labels.map(() => [1, 1, 1, 1]), 0), big, 1_000);
+    const display = activity.sampleDisplay(1_000);
+    expect(display.health).toBe('waiting');
+    expect(display.byLabel.size).toBe(0);
+    expect(display.error).toMatch(/80 channels/);
+    expect(display.missingSamples).toBe(0);
   });
 });
