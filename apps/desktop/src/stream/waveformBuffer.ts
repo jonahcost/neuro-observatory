@@ -28,6 +28,12 @@ export interface WaveformChrome {
   /** `new-stream` only when `streamId` changed. A same-id backwards clock is `source-clock`. */
   restartCause: RestartCause | null;
   synthetic: boolean;
+  /**
+   * Increments when layout identity changes and the rings are cleared.
+   * Same labels with a new reference, type, unit, rate, or provenance still advance it.
+   * A restart hole does not.
+   */
+  layoutEpoch: number;
 }
 
 export interface WaveformRead extends WaveformChrome {
@@ -53,6 +59,7 @@ const EMPTY_CHROME: WaveformChrome = {
   clockRestarted: false,
   restartCause: null,
   synthetic: false,
+  layoutEpoch: 0,
 };
 
 /**
@@ -70,7 +77,8 @@ const EMPTY_CHROME: WaveformChrome = {
  * clears the rings so the synthetic sentence matches the samples on screen.
  * Samples stay out of React state; `paint` is called from the display loop.
  * Chrome listeners fire when labels, the error, the clock-domain caption,
- * or the synthetic sentence change.
+ * the synthetic sentence, or the layout epoch change. The epoch advances
+ * on every layout clear, including one that reuses the channel names.
  */
 export class WaveformBuffer {
   private channels: Float64Array[] = [];
@@ -94,6 +102,7 @@ export class WaveformBuffer {
   /** Further slots that must be written before the restart hole leaves the window. */
   private slotsUntilRestartClears: number | null = null;
   private synthetic = false;
+  private layoutEpoch = 0;
   private chrome: WaveformChrome = EMPTY_CHROME;
   private readonly listeners = new Set<() => void>();
 
@@ -355,6 +364,7 @@ export class WaveformBuffer {
     this.restartCause = null;
     this.slotsUntilRestartClears = null;
     this.synthetic = provenanceKind === 'synthetic';
+    this.layoutEpoch += 1;
   }
 
   private fail(message: string): void {
@@ -377,6 +387,7 @@ export class WaveformBuffer {
     this.restartCause = null;
     this.slotsUntilRestartClears = null;
     this.synthetic = false;
+    this.layoutEpoch += 1;
     this.error = message;
     this.publish();
   }
@@ -471,6 +482,7 @@ export class WaveformBuffer {
       clockRestarted: this.clockRestarted,
       restartCause: this.restartCause,
       synthetic: this.synthetic,
+      layoutEpoch: this.layoutEpoch,
     };
     const prev = this.chrome;
     const sameLabels =
@@ -483,7 +495,8 @@ export class WaveformBuffer {
       prev.error === next.error &&
       prev.clockRestarted === next.clockRestarted &&
       prev.restartCause === next.restartCause &&
-      prev.synthetic === next.synthetic
+      prev.synthetic === next.synthetic &&
+      prev.layoutEpoch === next.layoutEpoch
     ) {
       return;
     }

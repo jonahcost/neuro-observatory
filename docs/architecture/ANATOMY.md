@@ -53,7 +53,7 @@ Three.js is y-up; RAS is z-up. `BrainShell` rotates the scene group by −90° a
 
 FreeSurfer inflates each hemisphere around its own centre, so the two inflated surfaces overlap around x = 0 (verified on fsaverage and ds000248). For the **inflated** surface only, the viewer shifts each hemisphere along x so their medial extremes are `INFLATED_DISPLAY_GAP_MM` (8 mm) apart, and the provenance panel says so. Pial and white surfaces are drawn in place. Nothing is written back to data.
 
-The initial camera looks at the centre of the displayed bounds from the left-anterior-superior direction at twice the largest extent; orbit, pan and zoom use drei `OrbitControls`. The framing resets when the asset changes. Switching surface or display preset keeps the camera position, orbit target, and zoom, and only raises the far plane when the new bounds need it. The last ready mesh stays on screen while the next surface loads or fails.
+The initial camera looks at the centre of the displayed bounds from the left-anterior-superior direction at twice the largest extent; orbit, pan and zoom use drei `OrbitControls`. The framing resets when the asset changes. Switching surface or display preset keeps the camera position, orbit target, and zoom, and only raises the far plane when the new bounds need it. Reset view frames the surface currently on screen, including its position, orbit target, and far plane. The last ready mesh stays on screen while the next surface loads or fails, and a holographic pial view keeps its white inner shell until that mesh leaves.
 
 ## Asset contract (`anatomy-asset.v1`)
 

@@ -36,16 +36,12 @@
   box-shadow: 0 0 0 3px rgba(60, 240, 255, 0.16);
 }
 
-.full {
-  position: absolute;
-  width: 1px;
-  height: 1px;
-  padding: 0;
-  margin: -1px;
-  overflow: hidden;
-  clip: rect(0, 0, 0, 0);
-  white-space: nowrap;
-  border: 0;
+.detail {
+  margin: 2px 0 0;
+  max-width: 28rem;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.35;
 }
 
 .connection {

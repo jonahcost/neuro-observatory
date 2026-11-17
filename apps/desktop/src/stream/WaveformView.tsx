@@ -33,15 +33,21 @@ export function WaveformView({
   const chrome = useSyncExternalStore(buffer.subscribe, buffer.getChrome);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const emphasisRef = useRef<{ index: number; color: string } | null>(null);
+  const layoutEpochRef = useRef(chrome.layoutEpoch);
   const labels = chrome.labels;
   const selectedIndex = selectedChannel === null ? -1 : labels.indexOf(selectedChannel);
   emphasisRef.current = selectedIndex < 0 ? null : { index: selectedIndex, color: ACCENT_VIOLET };
 
   useEffect(() => {
-    if (onSelectChannel && selectedChannel !== null && !labels.includes(selectedChannel)) {
+    const epochChanged = layoutEpochRef.current !== chrome.layoutEpoch;
+    layoutEpochRef.current = chrome.layoutEpoch;
+    if (!onSelectChannel || selectedChannel === null) {
+      return;
+    }
+    if (epochChanged || !labels.includes(selectedChannel)) {
       onSelectChannel(null);
     }
-  }, [labels, onSelectChannel, selectedChannel]);
+  }, [chrome.layoutEpoch, labels, onSelectChannel, selectedChannel]);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -81,7 +87,8 @@ export function WaveformView({
   }, [buffer]);
 
   const shownUnit = unitLabel(chrome.unit);
-  const clockNote = restartNote(chrome.restartCause);
+  const clockNote = restartNote(chrome.restartCause).trim();
+  const syntheticNote = chrome.synthetic ? 'Synthetic signal — generated, not measured from a person.' : '';
 
   return (
     <section id="signals" className={styles.figure} aria-label="EEG waveforms">
@@ -97,13 +104,20 @@ export function WaveformView({
         {' · '}
         {HEALTH_LABELS[snapshot.health]}
       </p>
+      {syntheticNote || clockNote ? (
+        <p className={styles.note}>
+          {syntheticNote}
+          {syntheticNote && clockNote ? ' ' : ''}
+          {clockNote}
+        </p>
+      ) : null}
+      {labels.length === 0 ? <p className={styles.note}>Waiting for EEG samples.</p> : null}
       <details className={styles.notes}>
         <summary>Trace notes</summary>
         <p className={styles.note}>
-          {chrome.synthetic ? 'Synthetic signal — generated, not measured from a person. ' : ''}
           {labels.length > 0
-            ? `${labels.length} channels · ±${LANE_HALF_RANGE_UV} ${shownUnit} · ${WINDOW_SECONDS} s window at ${chrome.rateHz} Hz nominal. Time is seconds before the newest sample, using the stream's nominal sample spacing.${clockNote}`
-            : 'Waiting for EEG samples.'}
+            ? `${labels.length} channels · ±${LANE_HALF_RANGE_UV} ${shownUnit} · ${WINDOW_SECONDS} s window at ${chrome.rateHz} Hz nominal. Time is seconds before the newest sample, using the stream's nominal sample spacing.`
+            : 'Waiting for channel layout.'}
         </p>
       </details>
       {chrome.error ? <p role="alert">{chrome.error}</p> : null}

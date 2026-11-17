@@ -1,9 +1,9 @@
 # ADR-0015: Desktop instrument layout
 
-- Status: Proposed
+- Status: Accepted
 - Date: 2026-11-17
-- Decision Owner: Project owner
-- Related Work: `docs/work/active/WORK-2026-11-17-desktop-ui-refresh.md`
+- Decision Owner: Project owner (accepted the desktop layout and the review corrections on 2026-11-17)
+- Related Work: `docs/work/completed/WORK-2026-11-17-desktop-ui-refresh.md`
 - Supersedes: None. Narrows the ADR-0014 viewer controls to five display modes and changes the ADR-0010 framing rule so a surface change no longer resets the camera.
 
 ## Context
@@ -21,9 +21,9 @@ Verified on `03C/desktop-ui-refresh` at `6cf2a58`, which includes 03A (`2f5aebe`
 
 1. **Presentation only.** Change the desktop shell, display picker, camera lifetime, and a selected-channel cue. Do not change protocol schemas, acquisition, anatomy assets, mesh builders, RMS math, or waveform gap rules. Do not add a dependency, a route, or persisted preferences. `zustand` stays unused.
 2. **Five modes.** One radiogroup replaces the Surface and Rendering selects. Pial, White matter boundary, and Inflated are solid presets of those surfaces. Holographic and Grid are the pial wireframes from ADR-0014. A mode whose surface is absent from the asset is disabled. The default remains solid pial.
-3. **Camera.** Keep the last ready canvas mounted while the next surface loads or fails. Key `OrbitControls` by asset id only. Frame position and orbit target when the asset changes. A surface or preset change keeps position, target, and zoom, and only raises `camera.far` when the new bounds need a larger far plane.
-4. **Layout.** Cards on a darker ground: a header, the brain viewport, a display inspector, and the waveform dock. The header has a mark, the app name, and the existing source, connection, and health labels. There is one view, so the header has no section tabs. The source line leads with a short pill, “Synthetic EEG” or “Device EEG”, and keeps the full provenance sentence. The integrity list is an always-visible Stream details card to the left of the waveform dock. The viewport is titled Live Brain, shows a flat backdrop grid, “Drag to orbit”, and Reset view. Reset view restores the current asset’s framed position, orbit target, and far plane. The inspector is titled Display. Wireframe and opaque surfaces are the same radiogroup, and both groups use the same stacked rows. An Activity overlay switch hides or shows the electrode markers. Subject, atlas, marker, pathway, and provenance stay. The waveform plot stays 480px tall and scrolls instead of compressing its labels. Its heading reads EEG Waveforms and states the real window, 10 s at ±100 µV. The dock row is `minmax(220px, min(480px, 32vh))`, so at the 1280×800 and 1024×700 checks the viewport stays taller than the dock.
-5. **Selected channel.** A label in `App` state, default none, is shared by the waveform buttons and the electrode markers. The selected lane uses violet plus a bar and `aria-pressed`. The matching marker uses the same violet inside the existing frame loop; RMS still drives opacity. Inflated still draws no markers. A layout change that already clears the buffer clears the selection. Display switches do not.
+3. **Camera.** Keep the last ready canvas mounted while the next surface loads or fails, including the holographic white inner shell while that mesh is still the one on screen. Key `OrbitControls` by asset id only. Frame position, orbit target, and far together when the asset changes, using the surface then on screen. A surface or preset change keeps position, target, and zoom, and only raises `camera.far` when the new bounds need a larger far plane. Reset view frames the surface currently displayed: position, orbit target, and far come from that surface, and the far plane may shrink back to that framing.
+4. **Layout.** Cards on a darker ground: a header, the brain viewport, a display inspector, and the waveform dock. The header has a mark, the app name, and the existing source, connection, and health labels. There is one view, so the header has no section tabs. The source line leads with a short pill, “Synthetic EEG” or “Device EEG”, and shows the full provenance sentence as visible text. The integrity list is an always-visible Stream details card to the left of the waveform dock. The viewport is titled Live Brain, shows a flat backdrop grid, “Drag to orbit”, Reset view, and a visible line that electrode marks are template positions, not a source estimate. The inspector is titled Display. Wireframe and opaque surfaces are the same radiogroup, and both groups use the same stacked rows. An Activity overlay switch hides or shows the electrode markers. Subject, atlas, marker, pathway, and provenance stay. The waveform plot stays 480px tall and scrolls instead of compressing its labels. Its heading reads EEG Waveforms and states the real window, 10 s at ±100 µV. The synthetic “not measured” sentence and any restart caption stay visible on the figure. The longer nominal-spacing sentence stays under Trace notes. The dock row is `minmax(220px, min(480px, 32vh))`, so at the 1280×800 and 1024×700 checks the viewport stays taller than the dock.
+5. **Selected channel.** A label in `App` state, default none, is shared by the waveform buttons and the electrode markers. The selected lane uses violet plus a bar and `aria-pressed`, and the viewport calls it selected. The matching marker uses the same violet inside the existing frame loop; RMS still drives opacity. Inflated still draws no markers. A layout-identity change that clears the buffer clears the selection even when the channel names are unchanged. A same-layout restart does not. Display switches do not.
 6. **Status words.** Keep `CONNECTION_LABELS`, `HEALTH_LABELS`, and the synthetic or device provenance sentences. Do not rename Live to Streaming or Synthetic to Simulated.
 7. **Motion and focus.** No new animation. `prefers-reduced-motion` disables CSS transitions only. `:focus-visible` draws a cyan outline.
 
@@ -38,7 +38,7 @@ Verified on `03C/desktop-ui-refresh` at `6cf2a58`, which includes 03A (`2f5aebe`
 
 ## Consequences
 
-- Switching from an inflated view to Holographic or Grid loads pial again and can leave the inflated mesh on screen until that load finishes. The camera does not jump. An inflated brain can sit off the previous orbit target; pan still works, and a larger far plane avoids clipping.
+- Switching from an inflated view to Holographic or Grid loads pial again and can leave the inflated mesh on screen until that load finishes. The camera does not jump. An inflated brain can sit off the previous orbit target; pan still works, a larger far plane avoids clipping, and Reset view frames that inflated surface.
 - The header and the waveform both show connection text, from the same labels. The waveform figure keeps the status line ADR-0012 already required.
 - Violet marks a chosen channel. It is not a source estimate and does not change the RMS.
 - The integrity counters stay visible in the Stream details card. The source and connection lines stay in the header.
@@ -46,6 +46,6 @@ Verified on `03C/desktop-ui-refresh` at `6cf2a58`, which includes 03A (`2f5aebe`
 
 ## Validation and Rollback
 
-Unit tests cover the five-mode mapping, the camera pose rule, preset switches that do not refetch the catalog, a delayed surface load that keeps the canvas mounted, the white-matter failure sentence, and a selected channel that survives a mode change. The commands and the synthetic smoke results are recorded in the related work record. This ADR stays Proposed until the project owner accepts it; the change-set gate looks for an Accepted ADR and a completed work record.
+Unit tests cover the five-mode mapping, the camera pose rule, reset framing of the surface on screen, preset switches that do not refetch the catalog, a delayed surface load that keeps the canvas mounted, the white-matter failure sentence, a selected channel that survives a mode change, and a selection that clears when layout identity changes. The commands and the synthetic smoke results are recorded in the related work record. The project owner accepted this decision on 2026-11-17.
 
 Rollback is a revert of the desktop presentation files, this ADR, and the work record. Protocol v2 and the anatomy asset contract are unchanged.

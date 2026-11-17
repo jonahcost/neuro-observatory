@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { displayModeFor, modeAvailable, modeFrom } from './displayModes';
+import { displayModeFor, holdHolographicCompanion, modeAvailable, modeFrom } from './displayModes';
 
 describe('display modes', () => {
   it('maps the five picker modes onto the existing surface and preset', () => {
@@ -26,5 +26,12 @@ describe('display modes', () => {
     expect(modeAvailable('grid', kinds)).toBe(true);
     expect(modeAvailable('white', kinds)).toBe(false);
     expect(modeAvailable('pial', [])).toBe(false);
+  });
+
+  it('keeps the holographic inner shell until that held mesh leaves', () => {
+    expect(holdHolographicCompanion({ preset: 'holographic', surfaceKind: 'pial' })).toBe(true);
+    expect(holdHolographicCompanion({ preset: 'solid', surfaceKind: 'white' })).toBe(false);
+    expect(holdHolographicCompanion({ preset: 'grid', surfaceKind: 'pial' })).toBe(false);
+    expect(holdHolographicCompanion(null)).toBe(false);
   });
 });

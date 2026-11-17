@@ -36,12 +36,12 @@ export function StreamStatusPanel({ snapshot }: { snapshot: EegStreamSnapshot })
 
   return (
     <section className={styles.panel} aria-label="EEG stream status">
-      <div className={styles.summary}>
-        <p className={styles.pill} data-testid="provenance">
+      <div className={styles.summary} data-testid="provenance">
+        <p className={styles.pill}>
           <span className={live ? styles.dotLive : styles.dot} aria-hidden="true" />
           <span>{provenance.short}</span>
-          {provenance.full === provenance.short ? null : <span className={styles.full}>{provenance.full}</span>}
         </p>
+        {provenance.full === provenance.short ? null : <p className={styles.detail}>{provenance.full}</p>}
         <p className={styles.connection} role="status" aria-live="polite">
           {CONNECTION_LABELS[snapshot.connection]}
           {snapshot.connection === 'reconnecting' ? ` (attempt ${snapshot.reconnectAttempt})` : ''}

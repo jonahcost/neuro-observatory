@@ -38,6 +38,9 @@ describe('AnatomyViewer', () => {
     expect(screen.getByTestId('anatomy-kind').textContent).toContain('Template anatomy');
     expect(screen.getByTestId('activity-overlay').textContent).toContain('template display positions');
     expect(screen.getByTestId('activity-overlay').textContent).toContain('not a source estimate');
+    expect(screen.getByRole('region', { name: 'Cortical anatomy' }).textContent).toContain(
+      'Electrode marks are template positions, not a source estimate.',
+    );
     expect(screen.getByTestId('activity-overlay').textContent).toContain('one-second RMS');
     expect(screen.getByTestId('activity-overlay').textContent).toContain('30 µV');
     expect(screen.getByTestId('sensor-highlight-status').textContent).toContain('waiting');

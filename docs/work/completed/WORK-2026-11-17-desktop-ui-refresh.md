@@ -1,6 +1,6 @@
 # WORK-2026-11-17-desktop-ui-refresh: Desktop instrument layout
 
-- Status: Active
+- Status: Completed
 - Owner: Project owner
 - ADRs: `docs/architecture/decisions/ADR-0015-desktop-ui-refresh.md`
 
@@ -18,7 +18,7 @@ In scope:
 
 Non-goals: protocol or simulator changes, mesh construction, RMS math, waveform gap rules, opacity controls, persisted preferences, routes, and hardware.
 
-Dependencies: 03A and 03B on `6cf2a58`. ADR-0015 stays Proposed until the project owner accepts it.
+Dependencies: 03A and 03B on `6cf2a58`. The project owner accepted ADR-0015 on 2026-11-17, including the review corrections.
 
 ## Acceptance Criteria
 
@@ -27,23 +27,26 @@ Dependencies: 03A and 03B on `6cf2a58`. ADR-0015 stays Proposed until the projec
 - [x] Switching modes keeps the canvas mounted, keeps orbit position and zoom, keeps the selected channel, and keeps the single `onBlock` subscription. A new subject still reframes.
 - [x] The waveform dock reuses `WaveformView` at 480px. Loading, retry, reconnect, stale highlights, the inflated electrode note, and the white-matter fallback sentence still appear.
 - [x] Keyboard focus is visible in CSS. A selected channel has a cue besides color. Reduced motion disables CSS transitions only.
-- [x] Desktop lint, typecheck, tests, the workspace run-many, and the governance checks have been run, and the synthetic smoke test has been recorded.
+- [x] The header shows the full synthetic or device provenance sentence as visible text. The waveform figure shows the synthetic “not measured” sentence and any restart caption outside Trace notes. The viewport says electrode marks are template positions, not a source estimate, and a selected channel is labelled selected.
+- [x] Reset view frames the surface on screen (position, target, and far together). A display change only raises far. A layout-identity change clears the selected channel even when the names stay; a same-layout restart does not. A holographic mesh keeps its white inner shell until that mesh leaves.
+- [x] Desktop lint, typecheck, and tests have been re-run on this remediation and the results below are from that run. The earlier browser smoke was not repeated. The owner accepted ADR-0015 on 2026-11-17.
 
 ## Implementation Summary
 
 - Graphite tokens live in `apps/desktop/src/styles.css`. Canvas and marker colours that cannot read CSS variables live in `apps/desktop/src/theme.ts` (`#3cf0ff`, `#c4b5fd`, electrode `#9af7ff`). `:focus-visible` is a 2px cyan outline. `prefers-reduced-motion: reduce` shortens CSS animation and transition only.
-- `App` is a header plus a workspace. The header shows “Neuro Observatory” and the existing stream status. Source and connection stay visible. The integrity list is inside a closed “Stream details” disclosure. The workspace columns are `minmax(0, 1fr)` and `300px`. Rows are `minmax(320px, 1fr)` and `minmax(220px, min(480px, 32vh))`. The plot content stays 480px and scrolls. The 32vh cap is what keeps the brain the taller row at 800px and 700px; a 480px dock row left the brain at its 320px minimum.
+- `App` is a header plus a workspace. The header shows “Neuro Observatory” and the existing stream status. Source and connection stay visible, and the full provenance sentence is visible under the short pill. The integrity list is an always-visible Stream details card beside the waveforms. The workspace columns are `minmax(0, 1fr)` and `300px`. Rows are `minmax(320px, 1fr)` and `minmax(220px, min(480px, 32vh))`. The plot content stays 480px and scrolls. The 32vh cap is what keeps the brain the taller row at 800px and 700px; a 480px dock row left the brain at its 320px minimum.
 - The Surface and Rendering selects are one radiogroup. `displayModeFor` / `modeFrom` map Pial, White matter boundary, and Inflated to solid plus that surface, and Holographic and Grid to those presets on pial. A surface missing from the asset disables its radio. `BrainShell` still contains the other surface-by-preset branches.
 - The last ready surfaces, framing, and asset stay mounted while the next surface loads or fails. `OrbitControls` is keyed by asset id. A new asset sets camera position, target, and far. A surface or preset change keeps position, target, and zoom, and only raises `camera.far`. `docs/architecture/ANATOMY.md` says the same.
 - The selected channel is a label on `App`, default none. Lane labels are buttons with `aria-pressed`, violet text, and a left bar. `ElectrodeMarkers` reads that label from a ref inside the existing frame loop. RMS still drives opacity. Inflated still draws no markers. `paint` takes an optional emphasis colour and otherwise keeps `#7dd3fc`.
 - One `EegStreamClient`, one `onBlock`, one `WaveformBuffer`, and one `ChannelActivity` remain in `App`. No opacity slider, route, dependency, or stored preference.
+- Review remediation: the provenance sentence is visible header text, and the waveform keeps the synthetic disclaimer and restart caption outside Trace notes. The viewport says the electrode marks are template positions, not a source estimate, and labels a chosen channel as selected. Reset view applies the current surface’s position, target, and far together. A layout clear advances `layoutEpoch` so the selection drops even when the names stay. The held holographic mesh keeps its white inner shell until that mesh changes.
 - After the first layout, the owner asked for a closer match to a reference card screen. The shell uses rounded cards, a header mark, a Live Brain title, a backdrop grid, Reset view, and an Activity overlay switch for the existing electrode markers. Wireframe and opaque surfaces use the same stacked rows. The header has no section tabs. The source pill says Synthetic EEG or Device EEG and still carries the full provenance sentence. Stream details is its own card to the left of the waveforms, with the integrity list always visible. The wireframe label sits above the Holographic and Grid buttons instead of overlapping them. The waveform heading says EEG Waveforms with the real 10 s and ±100 µV window. The longer trace sentence sits under Trace notes so the lanes stay visible. The reference’s opacity slider, “Simulated” wording, 5 s axis, and three-channel drawing were not copied.
 
 ## Validation Evidence
 
 Final tree, after the dock-row change, on 2026-11-17:
 
-- `NX_DAEMON=false yarn nx run-many -t lint test typecheck build --parallel=3 --skip-nx-cache --output-style=static` passed in 7.7s. Protocol: 98 tests. Desktop: lint and typecheck passed, 16 files / 90 tests. Engine: ruff passed, pytest 406 passed / 4 deselected. Vite build wrote `dist/apps/desktop`. Warnings: the desktop JS chunk is 1,364.52 kB (gzip 379.88 kB); pytest printed `StarletteDeprecationWarning` for `starlette.testclient`.
+- `NX_DAEMON=false yarn nx run-many -t lint test typecheck build --parallel=3 --skip-nx-cache --output-style=static` passed in 7.7s on the pre-remediation tree. Protocol: 98 tests. Desktop: lint and typecheck passed, 16 files / 90 tests. Engine: ruff passed, pytest 406 passed / 4 deselected. Vite build wrote `dist/apps/desktop`. Warnings: the desktop JS chunk is 1,364.52 kB (gzip 379.88 kB); pytest printed `StarletteDeprecationWarning` for `starlette.testclient`. That count is historical. The remediation run below is the one that matches this tree.
 - Desktop tests in that run include `displayModes.spec.ts`, `cameraSession.spec.ts`, `theme.spec.ts`, `AnatomyViewer.spec.tsx` (preset switch does not refetch, delayed white load keeps `data-testid="scene"`, inflated 8 mm sentence, white-matter scaled-copy sentence), `WaveformView.spec.tsx` (Cz `aria-pressed`), `StreamStatusPanel.spec.tsx` (details opened before the integrity list), and `app.spec.tsx` (waveform region follows anatomy; Cz stays pressed after Grid; one `StubWebSocket`).
 
 Synthetic smoke against the already-running Vite page at `http://localhost:4200` and the local engine. No headset.
@@ -56,11 +59,12 @@ Synthetic smoke against the already-running Vite page at `http://localhost:4200`
 - The engine log for that restart accepted four `/ws/v2/eeg` connections from the already-open dev page. `app.spec.tsx` still sees one socket on a fresh mount. This layout does not add a second `onBlock`.
 - `:focus-visible` is in `styles.css`. Programmatic focus and the embedded browser’s Tab did not match that pseudo-class, so a physical keyboard outline was not observed.
 
-Governance, this working tree, ADR still Proposed and this record still active:
+Review remediation, re-checked on 2026-11-17 after the independent review. The owner accepted ADR-0015 on 2026-11-17. The branch already contains implementation commits `0be1cad` and `e352a65`. The remediation and this acceptance are in the working tree and are not committed yet.
 
-- `python3 tools/governance/check_governance.py --all` passed: “Governance check passed. Human review and scientific/safety validation still required.”
-- `python3 tools/governance/check_governance.py --base origin/main --head HEAD` also passed. That comparison sees committed paths only. There is no implementation commit yet, so it does not see these files.
-- A `check_change_set` dry run over the 24 working-tree paths failed, as the interim check before acceptance: “Implementation/config change requires an added or updated completed WORK record in this PR” and “ADR-0015-desktop-ui-refresh.md: Status must be Accepted”.
+- `NX_DAEMON=false yarn nx run-many -t lint test typecheck --projects=desktop --parallel=3 --skip-nx-cache --output-style=static` passed. Lint and typecheck passed. Vitest: 16 files, 95 tests, all passed, about 1.4s. The new tests cover reset framing of the surface on screen, a display change that does not shrink far, a holographic hold of the inner shell, a reference change that advances `layoutEpoch`, a selection cleared when that epoch changes, a selection kept across a same-layout restart, the visible synthetic sentence, and the visible restart caption.
+- The engine suite, the production build, and the browser smoke were not re-run for this remediation.
+- `python3 tools/governance/check_governance.py --all` passed after this record moved to `docs/work/completed/` and ADR-0015 was marked Accepted: “Governance check passed. Human review and scientific/safety validation still required.”
+- `python3 tools/governance/check_governance.py --base origin/main --head HEAD` failed: “Implementation/config change requires an added or updated completed WORK record in this PR.” That comparison sees only commits. HEAD still adds the work record under `docs/work/active/`. The failure clears once the acceptance, the move, and the remediation are committed.
 
 ## Risks and Follow-ups
 
@@ -70,8 +74,9 @@ Governance, this working tree, ADR still Proposed and this record still active:
 - Violet is a selection cue. It does not change the RMS and is not a source estimate.
 - The physical-keyboard focus outline was not observed in the embedded browser. The CSS rule is present.
 - The desktop production chunk remains over 500 kB. That warning predates this layout.
-- ADR-0015 is Proposed. This record stays in `docs/work/active/` until the owner accepts it. Nothing was committed.
+- The header and the waveform both remain polite live regions. That double announcement was left in place because the decision asks for both status lines.
+- The remediation and the acceptance are uncommitted. Until they are committed, `origin/main...HEAD` still sees the earlier Proposed ADR and the active work path.
 
 ## Human Review
 
-The owner requested implementation of the proposed 03C plan on 2026-11-17. That request is not recorded here as acceptance of ADR-0015. The ADR stays Proposed, and this record stays Active, until the owner accepts it. No commit, push, or hardware check was made.
+The owner requested implementation of the proposed 03C plan on 2026-11-17. A later review found the provenance sentence clipped, Reset view framing split across two surfaces, and a layout change that kept a selected channel when the names did not change. Those are corrected in this working tree. The owner accepted ADR-0015, including those corrections, on 2026-11-17. No push or hardware check was made.

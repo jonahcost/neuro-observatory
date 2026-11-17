@@ -56,3 +56,10 @@ export function modeFrom(surfaceKind: SurfaceKind, preset: RenderPresetId): Disp
 export function modeAvailable(mode: DisplayModeId, availableKinds: readonly SurfaceKind[]): boolean {
   return availableKinds.includes(displayModeFor(mode).surfaceKind);
 }
+
+/** The held holographic pial scene keeps its white inner shell until that mesh leaves. */
+export function holdHolographicCompanion(
+  held: { preset: RenderPresetId; surfaceKind: SurfaceKind } | null,
+): boolean {
+  return held !== null && held.preset === 'holographic' && held.surfaceKind === 'pial';
+}

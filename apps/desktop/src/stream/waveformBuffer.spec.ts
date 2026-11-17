@@ -278,6 +278,7 @@ describe('WaveformBuffer', () => {
 
     expect(buffer.read().values).toEqual([[7]]);
     expect(buffer.read().synthetic).toBe(true);
+    expect(buffer.read().layoutEpoch).toBe(2);
   });
 
   it('clears samples when a channel type changes', () => {

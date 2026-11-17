@@ -6,8 +6,17 @@ import { RMS_FULL_SCALE_UV, type ActivityDisplay, type ChannelActivity } from '.
 import { BrainShell } from './BrainShell';
 import styles from './AnatomyViewer.module.css';
 import type { AnatomyClient, LoadedParcellation, LoadedSurface } from './anatomyClient';
-import { cameraPoseAction, frameRequested, nextCameraFar, orbitControlsKey } from './cameraSession';
-import { MODE_LABELS, OPAQUE_MODES, WIRE_MODES, displayModeFor, modeAvailable, modeFrom, type DisplayModeId } from './displayModes';
+import { cameraCommand, orbitControlsKey } from './cameraSession';
+import {
+  MODE_LABELS,
+  OPAQUE_MODES,
+  WIRE_MODES,
+  displayModeFor,
+  holdHolographicCompanion,
+  modeAvailable,
+  modeFrom,
+  type DisplayModeId,
+} from './displayModes';
 import type { RenderPresetId } from './renderPresets';
 import { INFLATED_DISPLAY_GAP_MM, cameraFraming, displayBoundsMm, displayOffsetsMm, type Vec3 } from './sceneGeometry';
 import { unmappedTemplateLabels } from './template1020';
@@ -15,7 +24,7 @@ import { useAnatomy, type AnatomyView, type Load } from './useAnatomy';
 
 export const ANATOMY_KIND_LABELS: Record<AnatomyKind, string> = {
   template: 'Template anatomy — an average brain (fsaverage), not any individual',
-  'reference-subject': "Reference subject — a public research participant's anatomy, not yours",
+  'reference-subject': "Reference subject — a public research participant's anatomy",
   personal: 'Personal anatomy — reconstructed from an MRI you imported',
 };
 
@@ -53,29 +62,31 @@ function FrameCamera({
   const appliedAsset = useRef<string | null>(null);
   const seenReset = useRef(0);
   useEffect(() => {
-    const action = cameraPoseAction(appliedAsset.current, assetId);
-    const resetting = frameRequested(false, resetNonce, seenReset.current);
-    if (resetting && !hasOrbitTarget(controls)) {
+    const command = cameraCommand({
+      previousAssetId: appliedAsset.current,
+      assetId,
+      resetNonce,
+      seenResetNonce: seenReset.current,
+      currentFar: camera.far,
+      framing: { position, target, far },
+    });
+    if (command.kind === 'raise-far') {
+      if (command.far !== camera.far) {
+        camera.far = command.far;
+        camera.updateProjectionMatrix();
+      }
       return;
     }
-    if (action === 'frame' || resetting) {
-      camera.position.set(position[0], position[1], position[2]);
-      camera.near = 1;
-      camera.far = far;
-      if (resetting && hasOrbitTarget(controls)) {
-        controls.target.set(target[0], target[1], target[2]);
-        controls.update();
-        seenReset.current = resetNonce;
-      }
-      if (action === 'frame') {
-        appliedAsset.current = assetId;
-      }
-    } else {
-      const raised = nextCameraFar(camera.far, far);
-      if (raised !== camera.far) {
-        camera.far = raised;
-      }
+    if (!hasOrbitTarget(controls)) {
+      return;
     }
+    camera.position.set(command.position[0], command.position[1], command.position[2]);
+    camera.near = 1;
+    camera.far = command.far;
+    controls.target.set(command.target[0], command.target[1], command.target[2]);
+    controls.update();
+    appliedAsset.current = assetId;
+    seenReset.current = resetNonce;
     camera.updateProjectionMatrix();
   }, [assetId, camera, controls, far, position, resetNonce, target]);
   return null;
@@ -373,6 +384,7 @@ export const AnatomyViewer = memo(function AnatomyViewer({
   const [highlight, setHighlight] = useState<ActivityDisplay>(() => activity.sampleDisplay(0));
   const heldRef = useRef<HeldScene | null>(null);
   const framedAssetId = useRef<string | null>(null);
+  const appliedReset = useRef(0);
   const orbitTarget = useRef<Vec3 | null>(null);
   const orbitPosition = useRef<Vec3 | null>(null);
   const selectedLabelRef = useRef<string | null>(selectedChannel);
@@ -417,6 +429,13 @@ export const AnatomyViewer = memo(function AnatomyViewer({
     orbitTarget.current = framing.target;
     orbitPosition.current = framing.position;
   }
+  if (shown && framing && resetNonce !== appliedReset.current) {
+    if (resetNonce !== 0) {
+      orbitTarget.current = framing.target;
+      orbitPosition.current = framing.position;
+    }
+    appliedReset.current = resetNonce;
+  }
   const poseTarget = orbitTarget.current;
   const posePosition = orbitPosition.current;
   const error = firstError(view);
@@ -424,7 +443,10 @@ export const AnatomyViewer = memo(function AnatomyViewer({
   const empty = view.catalog.state === 'ready' && view.catalog.value.assets.length === 0;
   const wantWhite =
     preset === 'holographic' && view.surfaceKind === 'pial' && asset !== null && asset.surfaces.some((surface) => surface.surface === 'white');
-  const companion = useCompanionSurface(client, wantWhite ? asset : null, wantWhite ? 'white' : null);
+  const heldCompanion = holdHolographicCompanion(shown);
+  const companionAsset = heldCompanion && shown ? shown.asset : wantWhite ? asset : null;
+  const companionKind = companionAsset?.surfaces.some((surface) => surface.surface === 'white') ? 'white' : null;
+  const companion = useCompanionSurface(client, companionKind ? companionAsset : null, companionKind);
   const labelKey = [...highlight.byLabel.keys()].join('\n');
   const channelLabels = useMemo(() => (labelKey === '' ? [] : labelKey.split('\n')), [labelKey]);
   const unmapped = unmappedTemplateLabels(channelLabels);
@@ -452,9 +474,9 @@ export const AnatomyViewer = memo(function AnatomyViewer({
             >
               <FrameCamera
                 assetId={shown.asset.assetId}
-                position={posePosition}
+                position={framing.position}
                 far={framing.far}
-                target={poseTarget}
+                target={framing.target}
                 resetNonce={resetNonce}
               />
               <hemisphereLight args={['#ffffff', '#30343f', 1.1]} />
@@ -502,11 +524,12 @@ export const AnatomyViewer = memo(function AnatomyViewer({
         <button type="button" className={styles.reset} onClick={() => setResetNonce((nonce) => nonce + 1)} disabled={!framing}>
           <span aria-hidden="true">↺</span> Reset view
         </button>
+        <p className={styles.caveat}>Electrode marks are template positions, not a source estimate.</p>
         <p className={styles.hint}>Drag to orbit</p>
         {selectedChannel && showActivity && !electrodesHidden ? (
           <p className={styles.legend}>
             <span className={styles.legendDot} aria-hidden="true" />
-            {selectedChannel} overlay
+            {selectedChannel} selected
           </p>
         ) : null}
       </div>

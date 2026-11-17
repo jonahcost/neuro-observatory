@@ -92,6 +92,7 @@ describe('WaveformView', () => {
     const labels = [...region.querySelectorAll('li')].map((item) => item.textContent).filter((text) => text);
     expect(labels).toEqual(LABELS);
     expect(region.textContent).toContain('Synthetic signal — generated, not measured from a person.');
+    expect(region.querySelector('details')?.textContent ?? '').not.toContain('not measured');
     expect(region.textContent).toContain('±100 µV');
     expect(screen.getByRole('status').textContent).toContain('Connected');
     expect(screen.getByRole('status').textContent).toContain('Live');
@@ -235,7 +236,9 @@ describe('WaveformView', () => {
     buffer.append(block(restarted, 0, [[9]], { firstSampleTimeUs: 0 }), restarted, 0);
 
     const { unmount } = render(<WaveformView buffer={buffer} snapshot={snapshot({ metadata: restarted })} />);
-    expect(screen.getByRole('region', { name: 'EEG waveforms' }).textContent).toContain('Engine clock restarted (new stream).');
+    const restartedRegion = screen.getByRole('region', { name: 'EEG waveforms' });
+    expect(restartedRegion.textContent).toContain('Engine clock restarted (new stream).');
+    expect(restartedRegion.querySelector('details')?.textContent ?? '').not.toContain('Engine clock restarted');
 
     const same = metadata(['Fp1']);
     const clockBuffer = new WaveformBuffer();
@@ -280,5 +283,71 @@ describe('WaveformView', () => {
     expect(selected.getAttribute('aria-pressed')).toBe('true');
     expect(selected.className).not.toBe('');
     expect(screen.getByRole('button', { name: 'Fp1' }).getAttribute('aria-pressed')).toBe('false');
+  });
+
+  it('clears the selection when layout identity changes and the labels stay', () => {
+    vi.stubGlobal('requestAnimationFrame', () => 1);
+    vi.stubGlobal('cancelAnimationFrame', () => undefined);
+    const buffer = new WaveformBuffer();
+    const meta = metadata(LABELS);
+    buffer.append(
+      block(
+        meta,
+        0,
+        meta.channels.map(() => [0]),
+      ),
+      meta,
+      0,
+    );
+    const onSelect = vi.fn();
+    render(<WaveformView buffer={buffer} snapshot={snapshot()} selectedChannel="Cz" onSelectChannel={onSelect} />);
+    const next = metadata(LABELS, 'stream-b');
+    next.channels = next.channels.map((channel) => ({ ...channel, reference: 'SRB2' }));
+    act(() => {
+      buffer.append(
+        block(
+          next,
+          0,
+          next.channels.map(() => [1]),
+        ),
+        next,
+        500,
+      );
+    });
+    expect(onSelect).toHaveBeenCalledWith(null);
+  });
+
+  it('keeps the selection when a new stream reuses the layout', () => {
+    vi.stubGlobal('requestAnimationFrame', () => 1);
+    vi.stubGlobal('cancelAnimationFrame', () => undefined);
+    const buffer = new WaveformBuffer();
+    const meta = metadata(LABELS);
+    buffer.append(
+      block(
+        meta,
+        0,
+        meta.channels.map(() => [0]),
+        { firstSampleTimeUs: 1_000_000 },
+      ),
+      meta,
+      0,
+    );
+    const onSelect = vi.fn();
+    render(<WaveformView buffer={buffer} snapshot={snapshot()} selectedChannel="Cz" onSelectChannel={onSelect} />);
+    const restarted = metadata(LABELS, 'stream-b');
+    act(() => {
+      buffer.append(
+        block(
+          restarted,
+          0,
+          restarted.channels.map(() => [1]),
+          { firstSampleTimeUs: 0 },
+        ),
+        restarted,
+        1_000,
+      );
+    });
+    expect(onSelect).not.toHaveBeenCalled();
+    expect(screen.getByRole('button', { name: 'Cz' }).getAttribute('aria-pressed')).toBe('true');
   });
 });
