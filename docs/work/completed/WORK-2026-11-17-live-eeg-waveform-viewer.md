@@ -56,7 +56,9 @@ The dev servers used for this check were left running: neuro-engine on `127.0.0.
 
 ## Risks and Follow-ups
 
-The ±100 µV lane scale clips larger future device amplitudes. Stored samples are unchanged. The display clock across an engine restart is an observed hole, not one monotonic timeline; an outage of about 10 s or more pushes the pre-restart traces out of the window, leaving blank space and then the new stream. In-stream gaps of a single sample can be narrower than a pixel. The restart caption stays until the channel layout changes, including after the hole has scrolled away. Recording and replay remain unimplemented.
+The ±100 µV lane scale clips larger future device amplitudes. Stored samples are unchanged. The display clock across an engine restart is an observed hole, not one monotonic timeline; an outage of about 10 s or more pushes the pre-restart traces out of the window, leaving blank space and then the new stream. In-stream gaps of a single sample can be narrower than a pixel. Recording and replay remain unimplemented.
+
+Correction (ADR-0013): the 8.4 s smoke note says the rest of each lane was blank. A full 1250-sample ring keeps older samples until the observed hole reaches the window, so that sentence is the observation as written and is not evidence that an 8.4 s hole erases the history. Provenance, reference, channel type, restart-hole retention, index placement, and the restart caption are corrected in `docs/work/completed/WORK-2026-11-17-waveform-viewer-review-remediation.md`.
 
 ## Human Review
 

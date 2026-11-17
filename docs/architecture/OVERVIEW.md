@@ -29,10 +29,10 @@ SyntheticEegAdapter (DeviceAdapter)          engine process, started by FastAPI 
   -> EegStreamClient      desktop; validates every message, integrity tracker, reconnect/stale/incompatible states
        |- onBlock()       WaveformBuffer (10 s ring, nominal sample spacing); never React state
        '- snapshot        throttled status for React (useSyncExternalStore)
-  -> WaveformView         canvas lanes at display refresh; empty slots break the stroke (ADR-0012)
+  -> WaveformView         canvas lanes at display refresh; empty slots break the stroke (ADR-0012, ADR-0013)
 ```
 
-Acquisition runs whether or not any client is connected. Recording, replay, and DSP are not implemented yet; their seams are the lossless `StreamHub` subscription and the `DeviceAdapter` protocol. The live waveform is the desktop ring buffer on `EegStreamClient.onBlock` ([ADR-0012](decisions/ADR-0012-live-eeg-waveform-viewer.md)). The wire contract is documented in [`packages/protocol/README.md`](../../packages/protocol/README.md).
+Acquisition runs whether or not any client is connected. Recording, replay, and DSP are not implemented yet; their seams are the lossless `StreamHub` subscription and the `DeviceAdapter` protocol. The live waveform is the desktop ring buffer on `EegStreamClient.onBlock` ([ADR-0012](decisions/ADR-0012-live-eeg-waveform-viewer.md), clarified by [ADR-0013](decisions/ADR-0013-waveform-viewer-review-remediation.md)). The wire contract is documented in [`packages/protocol/README.md`](../../packages/protocol/README.md).
 
 ## Implemented anatomy path (Milestone 02A, ADR-0010)
 

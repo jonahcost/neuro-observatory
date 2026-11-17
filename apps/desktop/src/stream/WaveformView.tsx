@@ -1,10 +1,20 @@
 import { useEffect, useRef, useSyncExternalStore } from 'react';
 import type { EegStreamSnapshot } from './eegStreamClient';
 import { CONNECTION_LABELS, HEALTH_LABELS } from './StreamStatusPanel';
-import { LANE_HALF_RANGE_UV, TIME_AXIS_PX, WINDOW_SECONDS, type WaveformBuffer } from './waveformBuffer';
+import { LANE_HALF_RANGE_UV, TIME_AXIS_PX, WINDOW_SECONDS, type RestartCause, type WaveformBuffer } from './waveformBuffer';
 
 function unitLabel(unit: string): string {
   return unit === 'uV' ? 'µV' : unit;
+}
+
+function restartNote(cause: RestartCause | null): string {
+  if (cause === 'new-stream') {
+    return ' Engine clock restarted (new stream). The gap is the observed outage; the new source timestamps were not joined to the previous clock.';
+  }
+  if (cause === 'source-clock') {
+    return ' Source clock moved backwards on this stream. The gap is the observed separation between those clocks.';
+  }
+  return '';
 }
 
 export function WaveformView({ buffer, snapshot }: { buffer: WaveformBuffer; snapshot: EegStreamSnapshot }) {
@@ -50,9 +60,7 @@ export function WaveformView({ buffer, snapshot }: { buffer: WaveformBuffer; sna
 
   const labels = chrome.labels;
   const shownUnit = unitLabel(chrome.unit);
-  const restartNote = chrome.clockRestarted
-    ? ' Engine clock restarted (new stream). The gap is the observed outage; the new source timestamps were not joined to the previous clock.'
-    : '';
+  const clockNote = restartNote(chrome.restartCause);
 
   return (
     <section aria-label="EEG waveforms" style={{ marginTop: 16 }}>
@@ -66,7 +74,7 @@ export function WaveformView({ buffer, snapshot }: { buffer: WaveformBuffer; sna
       <p style={{ margin: '0 0 8px', color: '#cbd5e1' }}>
         {chrome.synthetic ? 'Synthetic signal — generated, not measured from a person. ' : ''}
         {labels.length > 0
-          ? `${labels.length} channels · ±${LANE_HALF_RANGE_UV} ${shownUnit} · ${WINDOW_SECONDS} s window at ${chrome.rateHz} Hz nominal. Time is seconds before the newest sample, using the stream's nominal sample spacing.${restartNote}`
+          ? `${labels.length} channels · ±${LANE_HALF_RANGE_UV} ${shownUnit} · ${WINDOW_SECONDS} s window at ${chrome.rateHz} Hz nominal. Time is seconds before the newest sample, using the stream's nominal sample spacing.${clockNote}`
           : 'Waiting for EEG samples.'}
       </p>
       {chrome.error ? <p role="alert">{chrome.error}</p> : null}

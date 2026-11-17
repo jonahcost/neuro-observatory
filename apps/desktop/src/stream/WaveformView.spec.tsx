@@ -170,4 +170,90 @@ describe('WaveformView', () => {
     expect(ops).toEqual(['move', 'line', 'move', 'line', 'stroke']);
     unmount();
   });
+
+  it('draws a one-sample run and names a new stream separately from a backwards source clock', () => {
+    const ops: string[] = [];
+    let pending: FrameRequestCallback | null = null;
+    vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback) => {
+      pending = callback;
+      return 1;
+    });
+    vi.stubGlobal('cancelAnimationFrame', () => {
+      pending = null;
+    });
+    Object.defineProperty(HTMLCanvasElement.prototype, 'clientWidth', { configurable: true, get: () => 800 });
+    Object.defineProperty(HTMLCanvasElement.prototype, 'clientHeight', { configurable: true, get: () => 480 });
+    vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockImplementation(() => {
+      return {
+        setTransform() {
+          return undefined;
+        },
+        clearRect() {
+          return undefined;
+        },
+        save() {
+          return undefined;
+        },
+        restore() {
+          return undefined;
+        },
+        beginPath() {
+          return undefined;
+        },
+        rect() {
+          return undefined;
+        },
+        clip() {
+          return undefined;
+        },
+        moveTo() {
+          ops.push('move');
+        },
+        lineTo() {
+          ops.push('line');
+        },
+        stroke() {
+          ops.push('stroke');
+        },
+        fillRect() {
+          return undefined;
+        },
+        fillText() {
+          return undefined;
+        },
+        strokeStyle: '',
+        fillStyle: '',
+        lineWidth: 1,
+        font: '',
+      } as unknown as CanvasRenderingContext2D;
+    });
+
+    const buffer = new WaveformBuffer();
+    const meta = metadata(['Fp1']);
+    buffer.append(block(meta, 0, [[4]], { firstSampleTimeUs: 1_000_000 }), meta, 0);
+    const restarted = metadata(['Fp1'], 'stream-b');
+    buffer.append(block(restarted, 0, [[9]], { firstSampleTimeUs: 0 }), restarted, 0);
+
+    const { unmount } = render(<WaveformView buffer={buffer} snapshot={snapshot({ metadata: restarted })} />);
+    expect(screen.getByRole('region', { name: 'EEG waveforms' }).textContent).toContain('Engine clock restarted (new stream).');
+
+    const same = metadata(['Fp1']);
+    const clockBuffer = new WaveformBuffer();
+    clockBuffer.append(block(same, 0, [[4]], { firstSampleTimeUs: 1_000_000 }), same, 0);
+    clockBuffer.append(block(same, 1, [[9]], { blockSequence: 1, firstSampleTimeUs: 0 }), same, 1_000);
+    render(<WaveformView buffer={clockBuffer} snapshot={snapshot({ metadata: same })} />);
+    const captions = screen.getAllByRole('region', { name: 'EEG waveforms' }).map((node) => node.textContent ?? '');
+    expect(captions.some((text) => text.includes('Source clock moved backwards on this stream.'))).toBe(true);
+    expect(captions.some((text) => text.includes('Source clock moved backwards') && text.includes('new stream'))).toBe(false);
+
+    unmount();
+    ops.length = 0;
+    const single = new WaveformBuffer();
+    single.append(block(meta, 0, [[3]]), meta, 0);
+    render(<WaveformView buffer={single} snapshot={snapshot({ metadata: meta })} />);
+    act(() => {
+      pending?.(0);
+    });
+    expect(ops).toEqual(['move', 'line', 'stroke']);
+  });
 });

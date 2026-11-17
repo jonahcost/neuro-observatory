@@ -44,3 +44,14 @@ Verified on `main` at `43c0f38`:
 Unit tests cover channel order, ring rollover, in-stream gaps, and a new `streamId` with a reset `firstSampleTimeUs`. A component test checks labels, connection text, and that a gap starts a new stroke. `yarn nx run-many -t lint test typecheck build` and the governance checks cover the rest. The manual check is engine plus desktop: 16 scrolling labels, stop the engine, start it, see a hole and then new traces with no line across the hole.
 
 Rollback is reverting this desktop view, the buffer, and the overview sentence. The WebSocket contract and acquisition process stay as they are.
+
+## Post-acceptance correction
+
+ADR-0013 corrects viewer behavior this decision left wrong or ambiguous. The desktop-only viewer, nominal spacing, ±100 µV lanes, and the same-id half-sample clock rule stay.
+
+- Provenance kind, electrical reference, and channel type are part of layout identity. A change clears the rings, so a synthetic caption cannot describe device samples.
+- In-stream empty slots follow the sample-index gap. `droppedSamplesBefore` does not add further slots when it disagrees with that gap.
+- A restart hole stays visible when the next block is longer than the remaining window. The caption says "new stream" only for a new `streamId`. A same-id backwards clock has its own sentence. The sentence clears once that hole leaves the window.
+- An isolated finite sample is drawn. The 8.4 s smoke note in the 03A work record, which said the rest of each lane was blank, overstates a full ring: a hole shorter than the window keeps older samples.
+
+Recorded in `docs/work/completed/WORK-2026-11-17-waveform-viewer-review-remediation.md`.

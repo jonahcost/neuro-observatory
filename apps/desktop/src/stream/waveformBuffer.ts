@@ -14,14 +14,19 @@ export const TIME_AXIS_PX = 22;
 
 const TRACE_COLOR = '#7dd3fc';
 
+/** Why a clock-domain hole is still inside the window. */
+export type RestartCause = 'new-stream' | 'source-clock';
+
 export interface WaveformChrome {
   labels: readonly string[];
   unit: string;
   rateHz: number;
   capacity: number;
   error: string | null;
-  /** True after a new stream id or a backwards source clock. */
+  /** True while a restart hole from `restartCause` is still inside the window. */
   clockRestarted: boolean;
+  /** `new-stream` only when `streamId` changed. A same-id backwards clock is `source-clock`. */
+  restartCause: RestartCause | null;
   synthetic: boolean;
 }
 
@@ -46,6 +51,7 @@ const EMPTY_CHROME: WaveformChrome = {
   capacity: 0,
   error: null,
   clockRestarted: false,
+  restartCause: null,
   synthetic: false,
 };
 
@@ -55,10 +61,16 @@ const EMPTY_CHROME: WaveformChrome = {
  * Slots are one nominal sample apart. Empty slots break the trace.
  * A new stream id, or a same-id clock that jumps backwards by more than
  * half a sample, is a new clock domain: the hole is the time since the
- * last accepted sample (at least 250 ms, at most the window). Source
- * timestamps from the new domain are not placed on the previous clock.
+ * last accepted sample (at least 250 ms, at most the window) and stays
+ * visible when the next block is longer than the remaining window.
+ * Source timestamps from the new domain are not placed on the previous clock.
+ * Inside one stream, empty slots follow the sample index. A block that
+ * overlaps samples already stored appends only the new tail.
+ * Provenance, reference, and channel type are part of the layout: a change
+ * clears the rings so the synthetic sentence matches the samples on screen.
  * Samples stay out of React state; `paint` is called from the display loop.
- * Chrome listeners fire only when labels, the error, or the clock domain change.
+ * Chrome listeners fire when labels, the error, the clock-domain caption,
+ * or the synthetic sentence change.
  */
 export class WaveformBuffer {
   private channels: Float64Array[] = [];
@@ -73,8 +85,14 @@ export class WaveformBuffer {
   private nextSampleIndex: number | null = null;
   private lastSampleTimeUs: number | null = null;
   private lastAppendMs: number | null = null;
+  private types: string[] = [];
+  private references: string[] = [];
+  private provenanceKind: 'synthetic' | 'device' | null = null;
   private error: string | null = null;
   private clockRestarted = false;
+  private restartCause: RestartCause | null = null;
+  /** Further slots that must be written before the restart hole leaves the window. */
+  private slotsUntilRestartClears: number | null = null;
   private synthetic = false;
   private chrome: WaveformChrome = EMPTY_CHROME;
   private readonly listeners = new Set<() => void>();
@@ -92,6 +110,9 @@ export class WaveformBuffer {
     }
     const labels = metadata.channels.map((channel) => channel.label);
     const units = metadata.channels.map((channel) => channel.unit);
+    const types = metadata.channels.map((channel) => channel.type);
+    const references = metadata.channels.map((channel) => channel.reference);
+    const provenanceKind = metadata.provenance.kind;
     const rate = metadata.nominalSampleRateHz;
     if (!Number.isFinite(rate) || rate <= 0 || labels.length === 0) {
       this.fail('The stream has no positive sample rate or no channels, so nothing was plotted.');
@@ -109,9 +130,9 @@ export class WaveformBuffer {
       return;
     }
 
-    const layoutChanged = !this.sameLayout(labels, units, rate);
+    const layoutChanged = !this.sameLayout(labels, units, types, references, rate, provenanceKind);
     if (layoutChanged) {
-      this.allocate(labels, units, rate, capacity, metadata.provenance.kind === 'synthetic');
+      this.allocate(labels, units, types, references, rate, capacity, provenanceKind);
       this.appendSamples(block);
       this.finishAppend(block, nowMs);
       this.publish();
@@ -122,23 +143,37 @@ export class WaveformBuffer {
     const clockJumpedBack =
       this.lastSampleTimeUs !== null && block.firstSampleTimeUs < this.lastSampleTimeUs - periodUs / 2;
     if (this.streamId !== block.streamId || clockJumpedBack) {
-      this.insertRestartGap(nowMs);
-      this.clockRestarted = true;
-      this.appendSamples(block);
+      const cause: RestartCause = this.streamId !== block.streamId ? 'new-stream' : 'source-clock';
+      this.appendAcrossClockDomain(block, nowMs, cause);
+      this.publish();
+      return;
+    }
+
+    if (this.nextSampleIndex !== null && block.firstSampleIndex < this.nextSampleIndex) {
+      const skip = Math.min(block.sampleCount, this.nextSampleIndex - block.firstSampleIndex);
+      if (skip >= block.sampleCount) {
+        return;
+      }
+      this.appendSampleRange(block, skip, block.sampleCount);
+      this.noteSlotsWritten(block.sampleCount - skip);
       this.finishAppend(block, nowMs);
       this.publish();
       return;
     }
 
+    let written = 0;
     if (this.nextSampleIndex !== null) {
       const indexGap = block.firstSampleIndex - this.nextSampleIndex;
-      const missing = indexGap < 0 ? 1 : Math.max(indexGap, block.droppedSamplesBefore);
-      if (missing > 0) {
-        this.pushEmpty(Math.min(missing, this.capacity));
+      if (indexGap > 0) {
+        written = Math.min(indexGap, this.capacity);
+        this.pushEmpty(written);
       }
     }
     this.appendSamples(block);
+    written += block.sampleCount;
+    this.noteSlotsWritten(written);
     this.finishAppend(block, nowMs);
+    this.publish();
   }
 
   read(): WaveformRead {
@@ -205,10 +240,21 @@ export class WaveformBuffer {
       ctx.clip();
       ctx.beginPath();
       let drawing = false;
+      let runPoints = 0;
+      let lastX = 0;
+      let lastY = 0;
+      const closeRun = () => {
+        if (drawing && runPoints === 1) {
+          const nudge = lastX + 1 <= width ? 1 : -1;
+          ctx.lineTo(lastX + nudge, lastY);
+        }
+        drawing = false;
+        runPoints = 0;
+      };
       for (let i = 0; i < this.count; i += 1) {
         const value = row[(oldest + i) % this.capacity];
         if (!Number.isFinite(value)) {
-          drawing = false;
+          closeRun();
           continue;
         }
         const slotFromLeft = this.capacity - this.count + i;
@@ -218,10 +264,15 @@ export class WaveformBuffer {
         if (!drawing) {
           ctx.moveTo(x, y);
           drawing = true;
+          runPoints = 1;
         } else {
           ctx.lineTo(x, y);
+          runPoints += 1;
         }
+        lastX = x;
+        lastY = y;
       }
+      closeRun();
       ctx.stroke();
       ctx.restore();
     }
@@ -241,21 +292,49 @@ export class WaveformBuffer {
     ctx.restore();
   }
 
-  private sameLayout(labels: string[], units: string[], rate: number): boolean {
-    if (this.capacity === 0 || this.rateHz !== rate || this.labels.length !== labels.length) {
+  private sameLayout(
+    labels: string[],
+    units: string[],
+    types: string[],
+    references: string[],
+    rate: number,
+    provenanceKind: 'synthetic' | 'device',
+  ): boolean {
+    if (
+      this.capacity === 0 ||
+      this.rateHz !== rate ||
+      this.provenanceKind !== provenanceKind ||
+      this.labels.length !== labels.length
+    ) {
       return false;
     }
     for (let index = 0; index < labels.length; index += 1) {
-      if (this.labels[index] !== labels[index] || this.units[index] !== units[index]) {
+      if (
+        this.labels[index] !== labels[index] ||
+        this.units[index] !== units[index] ||
+        this.types[index] !== types[index] ||
+        this.references[index] !== references[index]
+      ) {
         return false;
       }
     }
     return true;
   }
 
-  private allocate(labels: string[], units: string[], rate: number, capacity: number, synthetic: boolean): void {
+  private allocate(
+    labels: string[],
+    units: string[],
+    types: string[],
+    references: string[],
+    rate: number,
+    capacity: number,
+    provenanceKind: 'synthetic' | 'device',
+  ): void {
     this.labels = labels.slice();
     this.units = units.slice();
+    this.types = types.slice();
+    this.references = references.slice();
+    this.provenanceKind = provenanceKind;
     this.unit = units[0] ?? 'uV';
     this.rateHz = rate;
     this.capacity = capacity;
@@ -268,7 +347,9 @@ export class WaveformBuffer {
     this.lastAppendMs = null;
     this.error = null;
     this.clockRestarted = false;
-    this.synthetic = synthetic;
+    this.restartCause = null;
+    this.slotsUntilRestartClears = null;
+    this.synthetic = provenanceKind === 'synthetic';
   }
 
   private fail(message: string): void {
@@ -278,6 +359,9 @@ export class WaveformBuffer {
     this.count = 0;
     this.labels = [];
     this.units = [];
+    this.types = [];
+    this.references = [];
+    this.provenanceKind = null;
     this.unit = '';
     this.rateHz = 0;
     this.streamId = null;
@@ -285,18 +369,49 @@ export class WaveformBuffer {
     this.lastSampleTimeUs = null;
     this.lastAppendMs = null;
     this.clockRestarted = false;
+    this.restartCause = null;
+    this.slotsUntilRestartClears = null;
     this.synthetic = false;
     this.error = message;
     this.publish();
   }
 
-  private insertRestartGap(nowMs: number): void {
+  /**
+   * Keep the observed hole, then the newest samples that still fit.
+   * A block longer than the window used to overwrite the hole it was meant to follow.
+   */
+  private appendAcrossClockDomain(block: EegBlock, nowMs: number, cause: RestartCause): void {
     const elapsedSec = this.lastAppendMs === null ? MIN_RESTART_GAP_SECONDS : Math.max(0, (nowMs - this.lastAppendMs) / 1000);
-    const slots = Math.min(
+    const gapSlots = Math.min(
       this.capacity,
       Math.max(1, Math.round(MIN_RESTART_GAP_SECONDS * this.rateHz), Math.round(elapsedSec * this.rateHz)),
     );
-    this.pushEmpty(slots);
+    const visibleGap = this.capacity <= 1 ? 0 : Math.min(gapSlots, this.capacity - 1);
+    const visibleNew = Math.min(block.sampleCount, this.capacity - visibleGap);
+    const priorKeep = Math.min(this.count, this.capacity - visibleGap - visibleNew);
+    this.count = priorKeep;
+    if (visibleGap > 0) {
+      this.pushEmpty(visibleGap);
+    }
+    if (visibleNew > 0) {
+      this.appendSampleRange(block, block.sampleCount - visibleNew, block.sampleCount);
+    }
+    this.restartCause = visibleGap > 0 ? cause : null;
+    this.clockRestarted = this.restartCause !== null;
+    this.slotsUntilRestartClears = this.clockRestarted ? this.capacity - visibleNew : null;
+    this.finishAppend(block, nowMs);
+  }
+
+  private noteSlotsWritten(slots: number): void {
+    if (this.slotsUntilRestartClears === null || slots <= 0) {
+      return;
+    }
+    this.slotsUntilRestartClears -= slots;
+    if (this.slotsUntilRestartClears <= 0) {
+      this.slotsUntilRestartClears = null;
+      this.restartCause = null;
+      this.clockRestarted = false;
+    }
   }
 
   private pushEmpty(slots: number): void {
@@ -309,7 +424,11 @@ export class WaveformBuffer {
   }
 
   private appendSamples(block: EegBlock): void {
-    for (let sample = 0; sample < block.sampleCount; sample += 1) {
+    this.appendSampleRange(block, 0, block.sampleCount);
+  }
+
+  private appendSampleRange(block: EegBlock, fromSample: number, toSample: number): void {
+    for (let sample = fromSample; sample < toSample; sample += 1) {
       for (let channel = 0; channel < this.channels.length; channel += 1) {
         const value = block.samples[channel]?.[sample];
         this.channels[channel][this.write] = typeof value === 'number' && Number.isFinite(value) ? value : Number.NaN;
@@ -345,6 +464,7 @@ export class WaveformBuffer {
       capacity: this.capacity,
       error: this.error,
       clockRestarted: this.clockRestarted,
+      restartCause: this.restartCause,
       synthetic: this.synthetic,
     };
     const prev = this.chrome;
@@ -357,6 +477,7 @@ export class WaveformBuffer {
       prev.capacity === next.capacity &&
       prev.error === next.error &&
       prev.clockRestarted === next.clockRestarted &&
+      prev.restartCause === next.restartCause &&
       prev.synthetic === next.synthetic
     ) {
       return;

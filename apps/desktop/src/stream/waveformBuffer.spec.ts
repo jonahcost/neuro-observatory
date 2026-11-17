@@ -157,6 +157,8 @@ describe('WaveformBuffer', () => {
       { start: holes + 1, end: holes + 2 },
     ]);
     expect(buffer.read().clockRestarted).toBe(true);
+    expect(buffer.read().restartCause).toBe('new-stream');
+    expect(buffer.read().synthetic).toBe(true);
   });
 
   it('uses the 250 ms floor when the restart is faster than that', () => {
@@ -179,6 +181,7 @@ describe('WaveformBuffer', () => {
 
     expect(buffer.read().values[0].filter((value) => value === null)).toHaveLength(Math.round(1.5 * RATE));
     expect(buffer.read().clockRestarted).toBe(true);
+    expect(buffer.read().restartCause).toBe('source-clock');
   });
 
   it('caps a long outage at the window instead of joining the reset monotonic clock', () => {
@@ -238,5 +241,115 @@ describe('WaveformBuffer', () => {
     buffer.append(block(meta, 2, [[2, 2]], { blockSequence: 1 }), meta, 16);
     expect(notices).toBe(1);
     expect(buffer.read().values[0]).toEqual([1, 1, 2, 2]);
+  });
+
+  it('clears samples and the synthetic sentence when a device stream reuses the montage', () => {
+    const buffer = new WaveformBuffer();
+    const synthetic = metadata({}, ['Fp1']);
+    buffer.append(block(synthetic, 0, [[4]]), synthetic, 0);
+    const device = metadata({ streamId: 'stream-device', provenance: { kind: 'device' } }, ['Fp1']);
+    buffer.append(block(device, 0, [[8]], { firstSampleTimeUs: 0 }), device, 500);
+
+    const read = buffer.read();
+    expect(read.synthetic).toBe(false);
+    expect(read.values).toEqual([[8]]);
+    expect(read.clockRestarted).toBe(false);
+  });
+
+  it('restores the synthetic sentence when a generated stream follows a device stream', () => {
+    const buffer = new WaveformBuffer();
+    const device = metadata({ provenance: { kind: 'device' } }, ['Fp1']);
+    buffer.append(block(device, 0, [[8]]), device, 0);
+    const synthetic = metadata({ streamId: 'stream-synthetic' }, ['Fp1']);
+    buffer.append(block(synthetic, 0, [[4]], { firstSampleTimeUs: 0 }), synthetic, 500);
+
+    const read = buffer.read();
+    expect(read.synthetic).toBe(true);
+    expect(read.values).toEqual([[4]]);
+  });
+
+  it('clears samples when the electrical reference changes', () => {
+    const buffer = new WaveformBuffer();
+    const first = metadata({}, ['Fp1']);
+    buffer.append(block(first, 0, [[1]]), first, 0);
+    const next = metadata({ streamId: 'stream-b' }, ['Fp1']);
+    next.channels = [{ ...next.channels[0], reference: 'SRB2' }];
+    buffer.append(block(next, 0, [[7]]), next, 500);
+
+    expect(buffer.read().values).toEqual([[7]]);
+    expect(buffer.read().synthetic).toBe(true);
+  });
+
+  it('clears samples when a channel type changes', () => {
+    const buffer = new WaveformBuffer();
+    const first = metadata({}, ['Fp1']);
+    buffer.append(block(first, 0, [[1]]), first, 0);
+    const next = metadata({ streamId: 'stream-b' }, ['Fp1']);
+    next.channels = [{ ...next.channels[0], type: 'EOG' }];
+    buffer.append(block(next, 0, [[7]]), next, 500);
+
+    expect(buffer.read().values).toEqual([[7]]);
+  });
+
+  it('places samples by index when droppedSamplesBefore is larger than the index gap', () => {
+    const buffer = new WaveformBuffer();
+    const meta = metadata({}, ['Fp1']);
+    buffer.append(block(meta, 0, [[1, 1]]), meta, 0);
+    buffer.append(block(meta, 2, [[2]], { blockSequence: 1, droppedSamplesBefore: 10, firstSampleTimeUs: 16_000 }), meta, 16);
+
+    expect(buffer.read().values[0]).toEqual([1, 1, 2]);
+  });
+
+  it('keeps a visible restart hole when the next block fills the window', () => {
+    const buffer = new WaveformBuffer();
+    const capacity = RATE * WINDOW_SECONDS;
+    const first = metadata({}, ['Fp1']);
+    buffer.append(block(first, 0, [[4]], { firstSampleTimeUs: 1_000_000 }), first, 0);
+    const restarted = metadata({ streamId: 'stream-b' }, ['Fp1']);
+    const samples = [Array.from({ length: capacity }, (_, index) => 100 + index)];
+    buffer.append(block(restarted, 0, samples, { firstSampleTimeUs: 0 }), restarted, 0);
+
+    const row = buffer.read().values[0];
+    const holes = Math.round(0.25 * RATE);
+    expect(row.filter((value) => value === null)).toHaveLength(holes);
+    expect(row[holes]).toBe(100 + holes);
+    expect(row[row.length - 1]).toBe(100 + capacity - 1);
+    expect(row).not.toContain(4);
+    expect(buffer.read().restartCause).toBe('new-stream');
+  });
+
+  it('appends only the new tail when a later block overlaps stored samples', () => {
+    const buffer = new WaveformBuffer();
+    const meta = metadata({}, ['Fp1']);
+    buffer.append(block(meta, 0, [[1, 2, 3]], { firstSampleTimeUs: 0 }), meta, 0);
+    buffer.append(block(meta, 1, [[9, 8, 7]], { blockSequence: 1, firstSampleTimeUs: 24_000 }), meta, 40);
+
+    expect(buffer.read().values[0]).toEqual([1, 2, 3, 7]);
+    expect(buffer.read().clockRestarted).toBe(false);
+  });
+
+  it('ignores a block whose indexes are already stored', () => {
+    const buffer = new WaveformBuffer();
+    const meta = metadata({}, ['Fp1']);
+    buffer.append(block(meta, 0, [[1, 2, 3]], { firstSampleTimeUs: 0 }), meta, 0);
+    buffer.append(block(meta, 0, [[9, 8, 7]], { blockSequence: 1, firstSampleTimeUs: 24_000 }), meta, 40);
+
+    expect(buffer.read().values[0]).toEqual([1, 2, 3]);
+  });
+
+  it('clears the restart caption once later samples push the hole out of the window', () => {
+    const buffer = new WaveformBuffer();
+    const capacity = RATE * WINDOW_SECONDS;
+    const first = metadata({}, ['Fp1']);
+    buffer.append(block(first, 0, [[4]], { firstSampleTimeUs: 1_000_000 }), first, 0);
+    const restarted = metadata({ streamId: 'stream-b' }, ['Fp1']);
+    buffer.append(block(restarted, 0, [[9]], { firstSampleTimeUs: 0 }), restarted, 0);
+    expect(buffer.read().clockRestarted).toBe(true);
+
+    const follow = Array.from({ length: capacity - 1 }, () => 6);
+    buffer.append(block(restarted, 1, [follow], { blockSequence: 1 }), restarted, 1_000);
+
+    expect(buffer.read().clockRestarted).toBe(false);
+    expect(buffer.read().restartCause).toBeNull();
   });
 });
