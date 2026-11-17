@@ -5,10 +5,11 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 vi.mock('@react-three/fiber', () => ({
   Canvas: () => <div data-testid="scene" />,
   useThree: () => undefined,
+  useFrame: () => undefined,
 }));
 
 const EMPTY_CATALOG = { type: 'anatomy.catalog', schemaVersion: 1, defaultAssetId: null, assets: [] };
-vi.mock('@react-three/drei', () => ({ OrbitControls: () => null }));
+vi.mock('@react-three/drei', () => ({ OrbitControls: () => null, Html: () => null }));
 
 class StubWebSocket {
   static instances: StubWebSocket[] = [];

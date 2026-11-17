@@ -29,6 +29,11 @@ def test_environment_overrides() -> None:
     assert settings.allowed_origins == {"http://localhost:1420", "http://127.0.0.1:4200"}
 
 
+def test_channel_scale_override() -> None:
+    settings = EngineSettings.from_env({"NEURO_ENGINE_SYNTHETIC_CHANNEL_SCALES": "Cz=4, Fp1=0.5"})
+    assert settings.synthetic.channel_scales == (("Cz", 4.0), ("Fp1", 0.5))
+
+
 @pytest.mark.parametrize(
     "env",
     [
@@ -40,6 +45,11 @@ def test_environment_overrides() -> None:
         {"NEURO_ENGINE_ALLOWED_ORIGINS": "*"},
         {"NEURO_ENGINE_ALLOWED_ORIGINS": "https://example.com"},
         {"NEURO_ENGINE_ALLOWED_ORIGINS": "tauri://localhost"},
+        {"NEURO_ENGINE_SYNTHETIC_CHANNEL_SCALES": "Nope=2"},
+        {"NEURO_ENGINE_SYNTHETIC_CHANNEL_SCALES": "Cz=-1"},
+        {"NEURO_ENGINE_SYNTHETIC_CHANNEL_SCALES": "Cz=4,Cz=2"},
+        {"NEURO_ENGINE_SYNTHETIC_CHANNEL_SCALES": "Cz"},
+        {"NEURO_ENGINE_SYNTHETIC_CHANNEL_SCALES": "Cz=nan"},
     ],
 )
 def test_invalid_environment_fails_fast(env: dict[str, str], monkeypatch: pytest.MonkeyPatch) -> None:

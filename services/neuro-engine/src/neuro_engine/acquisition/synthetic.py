@@ -51,6 +51,9 @@ class SyntheticConfig:
     theta_frequency_hz: float = 6.0
     noise_rms_uv: float = 5.0
     channel_phase_step_rad: float = 0.2
+    # Empty means every channel is unscaled. Omitted from config_hash in that case
+    # so the default provenance hash stays put. A set scale is part of the hash.
+    channel_scales: tuple[tuple[str, float], ...] = ()
 
     def __post_init__(self) -> None:
         if isinstance(self.seed, bool) or not isinstance(self.seed, int) or not 0 <= self.seed <= MAX_SEED:
@@ -72,9 +75,24 @@ class SyntheticConfig:
             value = getattr(self, name)
             if not math.isfinite(value) or value < 0:
                 raise DeviceConfigError(f"{name} must be finite and non-negative")
+        seen_scales: set[str] = set()
+        for item in self.channel_scales:
+            if not isinstance(item, tuple) or len(item) != 2 or not isinstance(item[0], str):
+                raise DeviceConfigError("channel_scales entries must be (label, scale) pairs")
+            label, scale = item
+            if label not in self.channel_labels:
+                raise DeviceConfigError(f"channel scale label {label!r} is not in channel_labels")
+            if label in seen_scales:
+                raise DeviceConfigError(f"duplicate channel scale for {label}")
+            seen_scales.add(label)
+            if isinstance(scale, bool) or not isinstance(scale, (int, float)) or not math.isfinite(float(scale)) or float(scale) < 0:
+                raise DeviceConfigError(f"channel scale for {label} must be a finite non-negative number")
 
     def config_hash(self) -> str:
-        canonical = json.dumps(asdict(self), sort_keys=True, separators=(",", ":"))
+        payload = asdict(self)
+        if not payload.get("channel_scales"):
+            payload.pop("channel_scales", None)
+        canonical = json.dumps(payload, sort_keys=True, separators=(",", ":"))
         return "sha256:" + hashlib.sha256(canonical.encode()).hexdigest()
 
     def descriptor(self, device_id: str = "synthetic-0") -> StreamDescriptor:
@@ -112,6 +130,11 @@ def generate_block(config: SyntheticConfig, block_number: int) -> np.ndarray:
     signal += config.theta_amplitude_uv * np.sin(2 * np.pi * config.theta_frequency_hz * t + 0.5 * phases)
     rng = np.random.default_rng([config.seed, block_number])
     signal += rng.normal(0.0, config.noise_rms_uv, size=signal.shape)
+    if config.channel_scales:
+        index = {label: i for i, label in enumerate(config.channel_labels)}
+        for label, scale in config.channel_scales:
+            if scale != 1:
+                signal[index[label]] *= float(scale)
     return signal
 
 

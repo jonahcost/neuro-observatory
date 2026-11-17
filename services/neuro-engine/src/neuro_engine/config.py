@@ -28,6 +28,30 @@ class SettingsError(ValueError):
     pass
 
 
+def _channel_scales(raw: str | None) -> tuple[tuple[str, float], ...]:
+    """Parse `Label=scale` pairs. Unknown labels are rejected by SyntheticConfig."""
+    if raw is None:
+        return ()
+    scales: list[tuple[str, float]] = []
+    seen: set[str] = set()
+    for part in raw.split(","):
+        piece = part.strip()
+        if not piece:
+            continue
+        if piece.count("=") != 1:
+            raise SettingsError(f"{ENV_PREFIX}SYNTHETIC_CHANNEL_SCALES entries must be Label=scale")
+        label, value = (item.strip() for item in piece.split("=", 1))
+        if not label or label in seen:
+            raise SettingsError(f"{ENV_PREFIX}SYNTHETIC_CHANNEL_SCALES has a duplicate or empty label")
+        seen.add(label)
+        try:
+            scale = float(value)
+        except ValueError as exc:
+            raise SettingsError(f"{ENV_PREFIX}SYNTHETIC_CHANNEL_SCALES value for {label} must be a number") from exc
+        scales.append((label, scale))
+    return tuple(scales)
+
+
 @dataclass(frozen=True, slots=True)
 class EngineSettings:
     device: Literal["synthetic"] = "synthetic"
@@ -80,6 +104,7 @@ class EngineSettings:
             synthetic = SyntheticConfig(
                 seed=get_int("SYNTHETIC_SEED", defaults.seed),
                 block_size=get_int("SYNTHETIC_BLOCK_SIZE", defaults.block_size),
+                channel_scales=_channel_scales(get("SYNTHETIC_CHANNEL_SCALES")),
             )
         except DeviceConfigError as exc:
             raise SettingsError(str(exc)) from None

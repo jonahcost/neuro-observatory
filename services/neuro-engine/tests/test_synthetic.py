@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import asyncio
 import dataclasses
+import hashlib
+import json
 
 import numpy as np
 import pytest
@@ -74,6 +76,32 @@ def test_config_hash_changes_with_any_parameter() -> None:
     assert base.config_hash() == SyntheticConfig().config_hash()
     assert base.config_hash() != dataclasses.replace(base, seed=1).config_hash()
     assert base.config_hash() != dataclasses.replace(base, noise_rms_uv=4.0).config_hash()
+
+
+def test_empty_scales_keep_the_default_block_and_hash() -> None:
+    config = SyntheticConfig(seed=1)
+    payload = dataclasses.asdict(config)
+    payload.pop("channel_scales")
+    canonical = json.dumps(payload, sort_keys=True, separators=(",", ":"))
+    assert config.config_hash() == "sha256:" + hashlib.sha256(canonical.encode()).hexdigest()
+    assert np.array_equal(generate_block(config, 2), generate_block(SyntheticConfig(seed=1, channel_scales=()), 2))
+    scaled = generate_block(SyntheticConfig(seed=1, channel_scales=(("Cz", 4.0),)), 2)
+    baseline = generate_block(config, 2)
+    cz = config.channel_labels.index("Cz")
+    assert np.array_equal(scaled[cz], baseline[cz] * 4)
+    for index in range(len(config.channel_labels)):
+        if index != cz:
+            assert np.array_equal(scaled[index], baseline[index])
+    assert config.config_hash() != SyntheticConfig(seed=1, channel_scales=(("Cz", 4.0),)).config_hash()
+
+
+def test_channel_scales_reject_unknown_duplicate_and_negative() -> None:
+    with pytest.raises(DeviceConfigError):
+        SyntheticConfig(channel_scales=(("Nope", 2.0),))
+    with pytest.raises(DeviceConfigError):
+        SyntheticConfig(channel_scales=(("Cz", -1.0),))
+    with pytest.raises(DeviceConfigError):
+        SyntheticConfig(channel_scales=(("Cz", 2.0), ("Cz", 3.0)))
 
 
 def test_spectrum_peaks_at_configured_alpha_and_theta() -> None:
