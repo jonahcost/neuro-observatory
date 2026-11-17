@@ -1,0 +1,202 @@
+{
+  "description": "Anatomy asset contract v1 fixtures. Every consumer and producer implementation must classify each file as `expect`.",
+  "expectValues": [
+    "valid",
+    "json",
+    "schema",
+    "unsupported-version",
+    "semantic"
+  ],
+  "cases": [
+    {
+      "file": "valid/asset-tetrahedra.json",
+      "expect": "valid",
+      "description": "Two hemispheres, pial and inflated, one parcellation and a surface-to-scanner transform"
+    },
+    {
+      "file": "valid/asset-template-no-transforms.json",
+      "expect": "valid",
+      "description": "Template without acquisition facts, transforms or parcellations"
+    },
+    {
+      "file": "valid/catalog-one-asset.json",
+      "expect": "valid",
+      "description": "Catalog with one default asset"
+    },
+    {
+      "file": "valid/catalog-empty.json",
+      "expect": "valid",
+      "description": "No prepared assets yet"
+    },
+    {
+      "file": "invalid/not-json.txt",
+      "expect": "json",
+      "description": "Truncated JSON text"
+    },
+    {
+      "file": "invalid/asset-version-2.json",
+      "expect": "unsupported-version",
+      "description": "Asset from a future contract version"
+    },
+    {
+      "file": "invalid/unknown-type.json",
+      "expect": "schema",
+      "description": "Unknown document type"
+    },
+    {
+      "file": "invalid/asset-extra-field.json",
+      "expect": "schema",
+      "description": "Unknown fields are rejected (assets never carry activity)"
+    },
+    {
+      "file": "invalid/asset-path-file-name.json",
+      "expect": "schema",
+      "description": "Buffer file names cannot be paths"
+    },
+    {
+      "file": "invalid/asset-absolute-source-path.json",
+      "expect": "schema",
+      "description": "Source paths are relative; absolute paths can identify the user"
+    },
+    {
+      "file": "invalid/asset-missing-units.json",
+      "expect": "schema",
+      "description": "Units are required"
+    },
+    {
+      "file": "invalid/asset-wrong-frame.json",
+      "expect": "schema",
+      "description": "v1 geometry is always FreeSurfer surface RAS"
+    },
+    {
+      "file": "invalid/asset-bad-rgba.json",
+      "expect": "schema",
+      "description": "Colour channels are 0..255"
+    },
+    {
+      "file": "invalid/asset-zero-field-strength.json",
+      "expect": "schema",
+      "description": "Field strength must be positive or null"
+    },
+    {
+      "file": "invalid/catalog-bad-asset-id.json",
+      "expect": "schema",
+      "description": "Asset IDs are lowercase and path-safe"
+    },
+    {
+      "file": "invalid/asset-positions-byte-length.json",
+      "expect": "semantic",
+      "description": "positions byteLength must be 12 * vertexCount"
+    },
+    {
+      "file": "invalid/asset-indices-dtype.json",
+      "expect": "semantic",
+      "description": "Triangle indices must be uint32"
+    },
+    {
+      "file": "invalid/asset-duplicate-surface.json",
+      "expect": "semantic",
+      "description": "One entry per hemisphere and surface"
+    },
+    {
+      "file": "invalid/asset-hemisphere-vertex-mismatch.json",
+      "expect": "semantic",
+      "description": "Surfaces of one hemisphere must share vertices"
+    },
+    {
+      "file": "invalid/asset-parcellation-vertex-mismatch.json",
+      "expect": "semantic",
+      "description": "Parcellation must label every vertex of its hemisphere"
+    },
+    {
+      "file": "invalid/asset-parcellation-without-surface.json",
+      "expect": "semantic",
+      "description": "Parcellation for a hemisphere with no surface"
+    },
+    {
+      "file": "invalid/asset-duplicate-label-index.json",
+      "expect": "semantic",
+      "description": "Label indices are unique"
+    },
+    {
+      "file": "invalid/asset-reused-file.json",
+      "expect": "semantic",
+      "description": "Each buffer has its own file"
+    },
+    {
+      "file": "invalid/asset-transform-last-row.json",
+      "expect": "semantic",
+      "description": "Affine last row must be [0, 0, 0, 1]"
+    },
+    {
+      "file": "invalid/asset-transform-wrong-from.json",
+      "expect": "semantic",
+      "description": "Transforms start from the asset frame"
+    },
+    {
+      "file": "invalid/asset-bounds-inverted.json",
+      "expect": "semantic",
+      "description": "Bounds min must not exceed max"
+    },
+    {
+      "file": "invalid/asset-bounds-overflow.json",
+      "expect": "semantic",
+      "description": "Number that overflows to Infinity when parsed"
+    },
+    {
+      "file": "invalid/catalog-default-not-listed.json",
+      "expect": "semantic",
+      "description": "Default asset must be listed"
+    },
+    {
+      "file": "invalid/catalog-duplicate-asset.json",
+      "expect": "semantic",
+      "description": "Asset IDs are unique"
+    },
+    {
+      "file": "invalid/asset-label-index-overflow.json",
+      "expect": "schema",
+      "description": "Parcellation label indices must fit the int32 label buffer"
+    },
+    {
+      "file": "invalid/asset-source-parent-segment.json",
+      "expect": "semantic",
+      "description": "Source paths cannot escape the data root"
+    },
+    {
+      "file": "invalid/asset-source-empty-segment.json",
+      "expect": "semantic",
+      "description": "Source paths cannot contain empty segments"
+    },
+    {
+      "file": "invalid/asset-unicode-timestamp.json",
+      "expect": "schema",
+      "description": "UTC timestamps use ASCII digits"
+    },
+    {
+      "file": "invalid/asset-impossible-timestamp.json",
+      "expect": "semantic",
+      "description": "UTC timestamps must be real calendar seconds"
+    },
+    {
+      "file": "invalid/asset-template-acquisition-facts.json",
+      "expect": "semantic",
+      "description": "Templates have no single-scan acquisition facts"
+    },
+    {
+      "file": "invalid/asset-reference-not-applicable.json",
+      "expect": "semantic",
+      "description": "Reference subjects require an applicable acquisition source"
+    },
+    {
+      "file": "invalid/asset-duplicate-transform-target.json",
+      "expect": "semantic",
+      "description": "Only one transform to each target frame is allowed"
+    },
+    {
+      "file": "invalid/asset-singular-transform.json",
+      "expect": "semantic",
+      "description": "Transform linear components must be invertible"
+    }
+  ]
+}

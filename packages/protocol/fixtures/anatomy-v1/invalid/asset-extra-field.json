@@ -1,0 +1,201 @@
+{
+  "type": "anatomy.asset",
+  "schemaVersion": 1,
+  "assetId": "fixture-tetra-0123456789abcdef",
+  "subject": {
+    "datasetId": "fixture",
+    "datasetVersion": "1",
+    "subjectId": "tetra",
+    "sessionId": null,
+    "displayName": "Fixture tetrahedra"
+  },
+  "anatomyKind": "reference-subject",
+  "acquisition": {
+    "fieldStrengthTesla": 3,
+    "sequence": "MPRAGE",
+    "scanner": "Fixture scanner",
+    "source": "user-declared"
+  },
+  "coordinateFrame": "freesurfer-surface-ras",
+  "units": "mm",
+  "transforms": [
+    {
+      "from": "freesurfer-surface-ras",
+      "to": "scanner-ras",
+      "matrix": [
+        1,
+        0,
+        0,
+        -2,
+        0,
+        1,
+        0,
+        3,
+        0,
+        0,
+        1,
+        4.5,
+        0,
+        0,
+        0,
+        1
+      ],
+      "units": "mm",
+      "source": "surface volume_info c_ras"
+    }
+  ],
+  "surfaces": [
+    {
+      "hemisphere": "lh",
+      "surface": "pial",
+      "vertexCount": 4,
+      "triangleCount": 4,
+      "positions": {
+        "file": "lh.pial.positions.f32",
+        "dtype": "float32",
+        "byteLength": 48,
+        "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      },
+      "indices": {
+        "file": "lh.pial.indices.u32",
+        "dtype": "uint32",
+        "byteLength": 48,
+        "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      },
+      "boundsMm": {
+        "min": [
+          -20.0,
+          0.0,
+          0.0
+        ],
+        "max": [
+          -10.0,
+          10.0,
+          10.0
+        ]
+      }
+    },
+    {
+      "hemisphere": "lh",
+      "surface": "inflated",
+      "vertexCount": 4,
+      "triangleCount": 4,
+      "positions": {
+        "file": "lh.inflated.positions.f32",
+        "dtype": "float32",
+        "byteLength": 48,
+        "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      },
+      "indices": {
+        "file": "lh.inflated.indices.u32",
+        "dtype": "uint32",
+        "byteLength": 48,
+        "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      },
+      "boundsMm": {
+        "min": [
+          -20.0,
+          0.0,
+          0.0
+        ],
+        "max": [
+          -10.0,
+          10.0,
+          10.0
+        ]
+      }
+    },
+    {
+      "hemisphere": "rh",
+      "surface": "pial",
+      "vertexCount": 4,
+      "triangleCount": 4,
+      "positions": {
+        "file": "rh.pial.positions.f32",
+        "dtype": "float32",
+        "byteLength": 48,
+        "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      },
+      "indices": {
+        "file": "rh.pial.indices.u32",
+        "dtype": "uint32",
+        "byteLength": 48,
+        "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      },
+      "boundsMm": {
+        "min": [
+          10.0,
+          0.0,
+          0.0
+        ],
+        "max": [
+          20.0,
+          10.0,
+          10.0
+        ]
+      }
+    }
+  ],
+  "parcellations": [
+    {
+      "atlas": "aparc",
+      "description": "Desikan-Killiany",
+      "hemisphere": "lh",
+      "vertexCount": 4,
+      "labels": [
+        {
+          "index": 0,
+          "name": "unknown",
+          "rgba": [
+            25,
+            5,
+            25,
+            255
+          ]
+        },
+        {
+          "index": 1,
+          "name": "precentral",
+          "rgba": [
+            60,
+            20,
+            220,
+            255
+          ]
+        }
+      ],
+      "vertexLabels": {
+        "file": "lh.aparc.labels.i32",
+        "dtype": "int32",
+        "byteLength": 16,
+        "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      }
+    }
+  ],
+  "provenance": {
+    "pipeline": "neuro-engine.anatomy.prepare",
+    "pipelineVersion": "1",
+    "preparedAtUtc": "2026-10-30T12:00:00Z",
+    "tools": [
+      {
+        "name": "nibabel",
+        "version": "5.4.2"
+      }
+    ],
+    "sources": [
+      {
+        "path": "fixture/surf/lh.pial",
+        "bytes": 100,
+        "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      }
+    ]
+  },
+  "license": {
+    "id": "CC0-1.0",
+    "url": "https://creativecommons.org/publicdomain/zero/1.0/",
+    "attribution": "Synthetic fixture; not anatomy."
+  },
+  "activity": [
+    0.1
+  ]
+}

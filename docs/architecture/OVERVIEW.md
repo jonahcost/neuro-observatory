@@ -7,9 +7,9 @@
 | Area | Source | Responsibility | Never owns |
 | --- | --- | --- | --- |
 | `apps/desktop` | React/Vite/Three.js | UI, charts, 3D visual state | Raw acquisition, medical conclusions, session source of truth |
-| `services/neuro-engine` | Python/FastAPI/uv | Device adapters, DSP, recording, source estimates (as built) | GPU display code |
+| `services/neuro-engine` | Python/FastAPI/uv | Device adapters, DSP, recording, dataset acquisition and anatomy assets, source estimates (as built) | GPU display code |
 | `packages/protocol` | JSON Schema (canonical) + TS validator/types; Python mirror in the engine | Stable, versioned producer/consumer contract and shared fixtures | Private samples or user data |
-| `pipelines/*` (future) | MRI/ML batch jobs | Reproducible reconstructions and training | Time-critical acquisition loop |
+| `pipelines/*` (future; `mri-reconstruction` is documented, not automated) | MRI/ML batch jobs | Reproducible reconstructions and training | Time-critical acquisition loop |
 | `hardware/*` (future) | CAD/PCB/firmware | Physical acquisition designs, simulator-only validation until safety clearance | Clinical-use certification claims |
 | `apps/hologram` (future) | Display adapter | Spatial renderer | Acquisition, source-estimation math |
 
@@ -32,6 +32,18 @@ SyntheticEegAdapter (DeviceAdapter)          engine process, started by FastAPI 
 ```
 
 Acquisition runs whether or not any client is connected. Recording, replay, DSP and the waveform buffer are not implemented yet; their seams are the lossless `StreamHub` subscription, the `DeviceAdapter` protocol, and `EegStreamClient.onBlock`. The wire contract is documented in [`packages/protocol/README.md`](../../packages/protocol/README.md).
+
+## Implemented anatomy path (Milestone 02A, ADR-0010)
+
+```text
+neuro-engine datasets fetch|import ...     CLI, explicit; verified, resumable; per-user data root outside the repo
+  -> raw/<dataset>/<version>/ + acquisition.json (provenance, licence, checksums)
+neuro-engine anatomy prepare <subject>     FreeSurfer surfaces -> anatomy-asset v1 (mm, surface RAS, full resolution)
+  -> GET /api/anatomy/v1/...               read-only, 127.0.0.1, CORS allowlist
+  -> AnatomyViewer                         desktop; verifies buffers, renders both hemispheres, labels anatomy kind
+```
+
+The anatomy path is offline batch code plus a read-only API; acquisition never imports it. The viewer shows anatomy only: no EEG channel is mapped to the cortex and no source estimate exists. Details, coordinate frames and the remaining steps toward source estimation are in [ANATOMY.md](ANATOMY.md).
 
 ## Non-functional requirements
 

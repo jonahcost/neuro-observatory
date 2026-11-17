@@ -1,0 +1,45 @@
+{
+  "type": "anatomy.catalog",
+  "schemaVersion": 1,
+  "defaultAssetId": "fixture-tetra-0123456789abcdef",
+  "assets": [
+    {
+      "assetId": "fixture-tetra-0123456789abcdef",
+      "subject": {
+        "datasetId": "fixture",
+        "datasetVersion": "1",
+        "subjectId": "tetra",
+        "sessionId": null,
+        "displayName": "Fixture tetrahedra"
+      },
+      "anatomyKind": "reference-subject",
+      "surfaces": [
+        "pial",
+        "inflated"
+      ],
+      "atlases": [
+        "aparc"
+      ],
+      "licenseId": "CC0-1.0"
+    },
+    {
+      "assetId": "fixture-tetra-0123456789abcdef",
+      "subject": {
+        "datasetId": "fixture",
+        "datasetVersion": "1",
+        "subjectId": "tetra",
+        "sessionId": null,
+        "displayName": "Fixture tetrahedra"
+      },
+      "anatomyKind": "reference-subject",
+      "surfaces": [
+        "pial",
+        "inflated"
+      ],
+      "atlases": [
+        "aparc"
+      ],
+      "licenseId": "CC0-1.0"
+    }
+  ]
+}

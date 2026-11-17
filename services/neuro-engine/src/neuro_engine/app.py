@@ -12,7 +12,7 @@ from neuro_engine.acquisition.base import DeviceAdapter
 from neuro_engine.acquisition.clock import Clock, MonotonicClock
 from neuro_engine.acquisition.service import AcquisitionService
 from neuro_engine.acquisition.synthetic import SyntheticEegAdapter
-from neuro_engine.api import http, ws
+from neuro_engine.api import anatomy, http, ws
 from neuro_engine.config import EngineSettings
 from neuro_engine.streaming.hub import StreamHub
 
@@ -53,4 +53,5 @@ def create_app(
     app = FastAPI(title="Neuro Observatory Engine", lifespan=lifespan)
     app.include_router(http.router)
     app.include_router(ws.router)
+    app.mount(anatomy.MOUNT_PATH, anatomy.create_anatomy_app(resolved_settings))
     return app
