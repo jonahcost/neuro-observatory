@@ -1,15 +1,15 @@
 /* Desktop instrument tokens. ACCENT_* values match apps/desktop/src/theme.ts. */
 
 :root {
-  --surface-0: #121418;
-  --surface-1: #1a1e24;
-  --surface-2: #222833;
-  --line: #2e3644;
-  --text: #e6e8ee;
-  --muted: #a8b0bd;
+  --surface-0: #070d16;
+  --surface-1: #101826;
+  --surface-2: #182333;
+  --line: #243246;
+  --text: #e7edf5;
+  --muted: #8ea0b5;
   --accent-cyan: #3cf0ff;
   --accent-violet: #c4b5fd;
-  --scene-bg: #07080c;
+  --scene-bg: #0c1624;
   --font: 'Segoe UI', system-ui, sans-serif;
 }
 

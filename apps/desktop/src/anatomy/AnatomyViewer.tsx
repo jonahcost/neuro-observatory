@@ -6,7 +6,7 @@ import { RMS_FULL_SCALE_UV, type ActivityDisplay, type ChannelActivity } from '.
 import { BrainShell } from './BrainShell';
 import styles from './AnatomyViewer.module.css';
 import type { AnatomyClient, LoadedParcellation, LoadedSurface } from './anatomyClient';
-import { cameraPoseAction, nextCameraFar, orbitControlsKey } from './cameraSession';
+import { cameraPoseAction, frameRequested, nextCameraFar, orbitControlsKey } from './cameraSession';
 import { MODE_LABELS, OPAQUE_MODES, WIRE_MODES, displayModeFor, modeAvailable, modeFrom, type DisplayModeId } from './displayModes';
 import type { RenderPresetId } from './renderPresets';
 import { INFLATED_DISPLAY_GAP_MM, cameraFraming, displayBoundsMm, displayOffsetsMm, type Vec3 } from './sceneGeometry';
@@ -27,16 +27,49 @@ interface HeldScene {
   parcellations: LoadedParcellation[] | null;
 }
 
-function FrameCamera({ assetId, position, far }: { assetId: string; position: Vec3; far: number }) {
+function hasOrbitTarget(controls: unknown): controls is { target: { set: (x: number, y: number, z: number) => void }; update: () => void } {
+  if (controls === null || typeof controls !== 'object' || !('target' in controls) || !('update' in controls)) {
+    return false;
+  }
+  const target = controls.target;
+  return typeof target === 'object' && target !== null && 'set' in target && typeof target.set === 'function';
+}
+
+function FrameCamera({
+  assetId,
+  position,
+  far,
+  target,
+  resetNonce,
+}: {
+  assetId: string;
+  position: Vec3;
+  far: number;
+  target: Vec3;
+  resetNonce: number;
+}) {
   const camera = useThree((state) => state.camera);
+  const controls = useThree((state) => state.controls);
   const appliedAsset = useRef<string | null>(null);
+  const seenReset = useRef(0);
   useEffect(() => {
     const action = cameraPoseAction(appliedAsset.current, assetId);
-    if (action === 'frame') {
+    const resetting = frameRequested(false, resetNonce, seenReset.current);
+    if (resetting && !hasOrbitTarget(controls)) {
+      return;
+    }
+    if (action === 'frame' || resetting) {
       camera.position.set(position[0], position[1], position[2]);
       camera.near = 1;
       camera.far = far;
-      appliedAsset.current = assetId;
+      if (resetting && hasOrbitTarget(controls)) {
+        controls.target.set(target[0], target[1], target[2]);
+        controls.update();
+        seenReset.current = resetNonce;
+      }
+      if (action === 'frame') {
+        appliedAsset.current = assetId;
+      }
     } else {
       const raised = nextCameraFar(camera.far, far);
       if (raised !== camera.far) {
@@ -44,7 +77,7 @@ function FrameCamera({ assetId, position, far }: { assetId: string; position: Ve
       }
     }
     camera.updateProjectionMatrix();
-  }, [assetId, camera, far, position]);
+  }, [assetId, camera, controls, far, position, resetNonce, target]);
   return null;
 }
 
@@ -103,8 +136,9 @@ function ModeOptions({
   onMode: (mode: DisplayModeId) => void;
 }) {
   return (
-    <fieldset className={styles.group}>
-      <legend>{legend}</legend>
+    <div>
+      <p className={styles.modeLabel}>{legend}</p>
+      <div className={styles.group}>
       {modes.map((id) => (
         <label key={id} className={styles.option}>
           <input
@@ -118,7 +152,8 @@ function ModeOptions({
           {MODE_LABELS[id]}
         </label>
       ))}
-    </fieldset>
+      </div>
+    </div>
   );
 }
 
@@ -130,6 +165,8 @@ function DisplayInspector({
   onMarker,
   showPathway,
   onPathway,
+  showActivity,
+  onActivity,
   electrodesHidden,
   highlight,
   unmapped,
@@ -143,6 +180,8 @@ function DisplayInspector({
   onMarker: (show: boolean) => void;
   showPathway: boolean;
   onPathway: (show: boolean) => void;
+  showActivity: boolean;
+  onActivity: (show: boolean) => void;
   electrodesHidden: boolean;
   highlight: ActivityDisplay;
   unmapped: readonly string[];
@@ -153,6 +192,7 @@ function DisplayInspector({
   const atlasId = useId();
   const markerId = useId();
   const pathwayId = useId();
+  const activityId = useId();
   const modeName = useId();
   const catalog = view.catalog.state === 'ready' ? view.catalog.value : null;
   const asset = view.asset.state === 'ready' ? view.asset.value : null;
@@ -165,13 +205,18 @@ function DisplayInspector({
 
   return (
     <>
+      <h2 className={styles.panelTitle}>Display</h2>
       <div role="radiogroup" aria-label="Brain display" className={styles.modes}>
-        <ModeOptions modes={OPAQUE_MODES} legend="Opaque surfaces" name={modeName} mode={mode} available={available} onMode={onMode} />
         <ModeOptions modes={WIRE_MODES} legend="Wireframe" name={modeName} mode={mode} available={available} onMode={onMode} />
+        <ModeOptions modes={OPAQUE_MODES} legend="Opaque surfaces" name={modeName} mode={mode} available={available} onMode={onMode} />
       </div>
+      <label className={styles.switch} htmlFor={activityId}>
+        <span className={styles.kicker}>Activity overlay</span>
+        <input id={activityId} type="checkbox" role="switch" checked={showActivity} onChange={(event) => onActivity(event.target.checked)} />
+      </label>
       <div>
         <label className={styles.field} htmlFor={subjectId}>
-          Subject
+          <span className={styles.kicker}>Subject</span>
           <select
             id={subjectId}
             value={view.assetId ?? ''}
@@ -186,7 +231,7 @@ function DisplayInspector({
           </select>
         </label>
         <label className={styles.field} htmlFor={atlasId}>
-          Anatomical atlas colouring
+          <span className={styles.kicker}>Anatomical atlas colouring</span>
           <select
             id={atlasId}
             value={view.atlas ?? ''}
@@ -211,11 +256,15 @@ function DisplayInspector({
           Refresh subjects
         </button>
       </div>
-      {electrodesHidden ? null : (
+      {electrodesHidden ? null : showActivity ? (
         <p data-testid="sensor-highlight-status" className={styles.note}>
           Sensor highlights: {highlight.error ? `unavailable. ${highlight.error}` : highlight.health}
           {highlight.missingSamples > 0 ? `. The last 1 s is missing ${highlight.missingSamples} samples.` : ''}
           {unmapped.length > 0 ? `. Unmapped channels: ${unmapped.join(', ')}` : ''}
+        </p>
+      ) : (
+        <p data-testid="sensor-highlight-status" className={styles.note}>
+          Activity overlay off. Electrode markers are hidden.
         </p>
       )}
       {showMarker ? <p className={styles.note}>Interior test marker — display probe, not anatomy.</p> : null}
@@ -319,6 +368,8 @@ export const AnatomyViewer = memo(function AnatomyViewer({
   const [preset, setPreset] = useState<RenderPresetId>('solid');
   const [showMarker, setShowMarker] = useState(true);
   const [showPathway, setShowPathway] = useState(false);
+  const [showActivity, setShowActivity] = useState(true);
+  const [resetNonce, setResetNonce] = useState(0);
   const [highlight, setHighlight] = useState<ActivityDisplay>(() => activity.sampleDisplay(0));
   const heldRef = useRef<HeldScene | null>(null);
   const framedAssetId = useRef<string | null>(null);
@@ -388,11 +439,24 @@ export const AnatomyViewer = memo(function AnatomyViewer({
 
   return (
     <>
-      <div className={[viewportClassName, styles.viewport].filter(Boolean).join(' ')} role="region" aria-label="Cortical anatomy">
+      <div id="live-brain" className={[viewportClassName, styles.viewport].filter(Boolean).join(' ')} role="region" aria-label="Cortical anatomy">
         <div className={styles.scene} role="region" aria-label="Brain scene">
           {shown && framing && poseTarget && posePosition ? (
-            <Canvas camera={{ fov: 35, near: 1, far: framing.far, position: posePosition }}>
-              <FrameCamera assetId={shown.asset.assetId} position={posePosition} far={framing.far} />
+            <Canvas
+              camera={{ fov: 35, near: 1, far: framing.far, position: posePosition }}
+              gl={{ alpha: true }}
+              onCreated={({ gl, scene }) => {
+                gl.setClearColor(0x000000, 0);
+                scene.background = null;
+              }}
+            >
+              <FrameCamera
+                assetId={shown.asset.assetId}
+                position={posePosition}
+                far={framing.far}
+                target={poseTarget}
+                resetNonce={resetNonce}
+              />
               <hemisphereLight args={['#ffffff', '#30343f', 1.1]} />
               <directionalLight position={[300, 400, 300]} intensity={1.6} />
               <directionalLight position={[-300, -100, -300]} intensity={0.6} />
@@ -406,6 +470,7 @@ export const AnatomyViewer = memo(function AnatomyViewer({
                 innerSurfaces={shown.preset === 'holographic' && shown.surfaceKind === 'pial' ? companion.surfaces : null}
                 parcellations={shown.parcellations}
                 selectedLabelRef={selectedLabelRef}
+                showActivity={showActivity}
               />
               <OrbitControls
                 key={orbitControlsKey(shown.asset.assetId)}
@@ -433,6 +498,17 @@ export const AnatomyViewer = memo(function AnatomyViewer({
             </div>
           ) : null}
         </div>
+        <h2 className={styles.sceneTitle}>Live Brain</h2>
+        <button type="button" className={styles.reset} onClick={() => setResetNonce((nonce) => nonce + 1)} disabled={!framing}>
+          <span aria-hidden="true">↺</span> Reset view
+        </button>
+        <p className={styles.hint}>Drag to orbit</p>
+        {selectedChannel && showActivity && !electrodesHidden ? (
+          <p className={styles.legend}>
+            <span className={styles.legendDot} aria-hidden="true" />
+            {selectedChannel} overlay
+          </p>
+        ) : null}
       </div>
       <aside className={[inspectorClassName, styles.inspector].filter(Boolean).join(' ')} aria-label="Display inspector">
         <DisplayInspector
@@ -443,6 +519,8 @@ export const AnatomyViewer = memo(function AnatomyViewer({
           onMarker={setShowMarker}
           showPathway={showPathway}
           onPathway={setShowPathway}
+          showActivity={showActivity}
+          onActivity={setShowActivity}
           electrodesHidden={electrodesHidden}
           highlight={highlight}
           unmapped={unmapped}

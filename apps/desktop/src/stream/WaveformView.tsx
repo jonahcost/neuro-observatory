@@ -84,20 +84,28 @@ export function WaveformView({
   const clockNote = restartNote(chrome.restartCause);
 
   return (
-    <section className={styles.figure} aria-label="EEG waveforms">
-      <h2 className={styles.heading}>Live EEG</h2>
+    <section id="signals" className={styles.figure} aria-label="EEG waveforms">
+      <div className={styles.bar}>
+        <h2 className={styles.heading}>EEG Waveforms</h2>
+        <p className={styles.scale}>
+          {WINDOW_SECONDS} s window · ±{LANE_HALF_RANGE_UV} {shownUnit}
+        </p>
+      </div>
       <p role="status" aria-live="polite" className={styles.note}>
         {CONNECTION_LABELS[snapshot.connection]}
         {snapshot.connection === 'reconnecting' ? ` (attempt ${snapshot.reconnectAttempt})` : ''}
         {' · '}
         {HEALTH_LABELS[snapshot.health]}
       </p>
-      <p className={styles.note}>
-        {chrome.synthetic ? 'Synthetic signal — generated, not measured from a person. ' : ''}
-        {labels.length > 0
-          ? `${labels.length} channels · ±${LANE_HALF_RANGE_UV} ${shownUnit} · ${WINDOW_SECONDS} s window at ${chrome.rateHz} Hz nominal. Time is seconds before the newest sample, using the stream's nominal sample spacing.${clockNote}`
-          : 'Waiting for EEG samples.'}
-      </p>
+      <details className={styles.notes}>
+        <summary>Trace notes</summary>
+        <p className={styles.note}>
+          {chrome.synthetic ? 'Synthetic signal — generated, not measured from a person. ' : ''}
+          {labels.length > 0
+            ? `${labels.length} channels · ±${LANE_HALF_RANGE_UV} ${shownUnit} · ${WINDOW_SECONDS} s window at ${chrome.rateHz} Hz nominal. Time is seconds before the newest sample, using the stream's nominal sample spacing.${clockNote}`
+            : 'Waiting for EEG samples.'}
+        </p>
+      </details>
       {chrome.error ? <p role="alert">{chrome.error}</p> : null}
       <div className={styles.plot}>
         <ol

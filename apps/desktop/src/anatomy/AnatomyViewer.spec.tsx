@@ -41,6 +41,9 @@ describe('AnatomyViewer', () => {
     expect(screen.getByTestId('activity-overlay').textContent).toContain('one-second RMS');
     expect(screen.getByTestId('activity-overlay').textContent).toContain('30 µV');
     expect(screen.getByTestId('sensor-highlight-status').textContent).toContain('waiting');
+    expect((screen.getByRole('button', { name: 'Reset view' }) as HTMLButtonElement).disabled).toBe(false);
+    expect(screen.getByText('Drag to orbit')).toBeTruthy();
+    expect((screen.getByRole('switch', { name: 'Activity overlay' }) as HTMLInputElement).checked).toBe(true);
     expect((screen.getByLabelText('Interior test marker') as HTMLInputElement).checked).toBe(true);
     expect(screen.getByText(/display probe, not anatomy/)).toBeTruthy();
     fireEvent.click(screen.getByLabelText('Interior test marker'));

@@ -446,6 +446,7 @@ export function BrainShell({
   innerSurfaces,
   parcellations,
   selectedLabelRef,
+  showActivity,
 }: {
   surfaces: readonly LoadedSurface[];
   preset: RenderPresetId;
@@ -456,6 +457,7 @@ export function BrainShell({
   innerSurfaces: readonly LoadedSurface[] | null;
   parcellations: readonly LoadedParcellation[] | null;
   selectedLabelRef: RefObject<string | null>;
+  showActivity: boolean;
 }) {
   const kind = surfaces[0]?.surface ?? 'pial';
   const offsets = useMemo(() => displayOffsetsMm(surfaces, kind), [surfaces, kind]);
@@ -494,7 +496,12 @@ export function BrainShell({
   return (
     <group rotation={RAS_TO_SCENE_ROTATION}>
       {showMarker ? <InteriorMarker position={centre} /> : null}
-      <ElectrodeMarkers electrodes={electrodes} activity={activity} visible={kind !== 'inflated'} selectedLabelRef={selectedLabelRef} />
+      <ElectrodeMarkers
+        electrodes={electrodes}
+        activity={activity}
+        visible={showActivity && kind !== 'inflated'}
+        selectedLabelRef={selectedLabelRef}
+      />
       <PathwayLayer activity={activity} electrodes={electrodes} visible={showPathway} />
       {wire
         ? surfaces.map((surface) => (

@@ -4,18 +4,43 @@
   color: var(--text);
 }
 
+.bar {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 6px;
+}
+
 .heading {
-  font-size: 13px;
-  font-weight: 600;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-  margin: 0 0 6px;
+  font-size: 16px;
+  font-weight: 650;
+  letter-spacing: 0;
+  text-transform: none;
+  margin: 0;
+}
+
+.scale {
+  margin: 0;
+  color: var(--muted);
+  font-size: 12px;
+  white-space: nowrap;
 }
 
 .note {
   margin: 0 0 8px;
   color: var(--muted);
-  font-size: 13px;
+  font-size: 12px;
+}
+
+.notes {
+  margin: 0 0 8px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.notes summary {
+  cursor: pointer;
 }
 
 .plot {
@@ -54,6 +79,8 @@
   color: var(--accent-violet);
   font-weight: 700;
   border-left-color: var(--accent-violet);
+  background: rgba(196, 181, 253, 0.14);
+  border-radius: 4px;
 }
 
 .canvasSlot {

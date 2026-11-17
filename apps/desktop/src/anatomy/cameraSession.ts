@@ -18,3 +18,8 @@ export function cameraPoseAction(previousAssetId: string | null, nextAssetId: st
 export function nextCameraFar(currentFar: number, framedFar: number): number {
   return Math.max(currentFar, framedFar);
 }
+
+/** Reset view frames again even though the asset id did not change. Nonce 0 is the initial mount. */
+export function frameRequested(assetChanged: boolean, resetNonce: number, seenNonce: number): boolean {
+  return assetChanged || (resetNonce !== 0 && resetNonce !== seenNonce);
+}
