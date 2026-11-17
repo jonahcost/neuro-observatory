@@ -56,4 +56,62 @@ describe('App', () => {
     unmount();
     expect(StubWebSocket.instances.every((s) => s.closed)).toBe(true);
   });
+
+  it('plots accepted blocks in stream channel order', async () => {
+    vi.stubGlobal('WebSocket', StubWebSocket);
+    vi.stubGlobal('requestAnimationFrame', () => 1);
+    vi.stubGlobal('cancelAnimationFrame', () => undefined);
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify(EMPTY_CATALOG))));
+    const { App } = await import('./app');
+    const { unmount } = render(<App />);
+
+    const labels = ['Fp1', 'Fp2', 'F3', 'F4', 'F7', 'F8', 'C3', 'C4', 'Cz', 'P3', 'P4', 'T7', 'T8', 'O1', 'O2', 'Pz'];
+    const metadata = {
+      type: 'stream.metadata',
+      schemaVersion: 2,
+      streamId: 'stream-a',
+      device: { kind: 'synthetic', model: 'neuro-observatory-synthetic-eeg', deviceId: 'synthetic-0', adapterVersion: '1.0.0' },
+      provenance: {
+        kind: 'synthetic',
+        generator: 'neuro_engine.acquisition.synthetic',
+        generatorVersion: '1',
+        seed: 0,
+        configHash: `sha256:${'ab'.repeat(32)}`,
+      },
+      nominalSampleRateHz: 125,
+      layout: 'channel-major',
+      channels: labels.map((label, index) => ({ index, label, type: 'EEG', unit: 'uV', reference: 'synthetic' })),
+      timebase: {
+        clock: 'engine-monotonic',
+        unit: 'us',
+        timestampSource: 'synthetic-nominal',
+        anchor: { monotonicUs: 0, unixTimeUs: 0 },
+      },
+    };
+    const samples = labels.map((_, index) => [index]);
+    const eegBlock = {
+      type: 'eeg.block',
+      schemaVersion: 2,
+      streamId: 'stream-a',
+      blockSequence: 0,
+      firstSampleIndex: 0,
+      sampleCount: 1,
+      firstSampleTimeUs: 0,
+      droppedSamplesBefore: 0,
+      samples,
+    };
+    const socket = StubWebSocket.instances.at(-1);
+    act(() => {
+      socket?.onopen?.(new Event('open'));
+      socket?.onmessage?.(new MessageEvent('message', { data: JSON.stringify(metadata) }));
+      socket?.onmessage?.(new MessageEvent('message', { data: JSON.stringify(eegBlock) }));
+    });
+
+    const waveforms = screen.getByRole('region', { name: 'EEG waveforms' });
+    const plotted = [...waveforms.querySelectorAll('li')].map((item) => item.textContent).filter((text) => text);
+    expect(plotted).toEqual(labels);
+    expect(waveforms.textContent).toContain('Synthetic signal');
+    expect(screen.queryByText(JSON.stringify(samples))).toBeNull();
+    unmount();
+  });
 });

@@ -1,6 +1,6 @@
 import type { EegStreamSnapshot } from './eegStreamClient';
 
-const CONNECTION_LABELS: Record<EegStreamSnapshot['connection'], string> = {
+export const CONNECTION_LABELS: Record<EegStreamSnapshot['connection'], string> = {
   idle: 'Not started',
   connecting: 'Connecting to neuro-engine…',
   open: 'Connected',
@@ -9,7 +9,7 @@ const CONNECTION_LABELS: Record<EegStreamSnapshot['connection'], string> = {
   stopped: 'Stopped',
 };
 
-const HEALTH_LABELS: Record<EegStreamSnapshot['health'], string> = {
+export const HEALTH_LABELS: Record<EegStreamSnapshot['health'], string> = {
   waiting: 'Waiting for data',
   live: 'Live',
   stale: 'Stale — no new samples',
