@@ -1,4 +1,5 @@
 import type { EegStreamSnapshot } from './eegStreamClient';
+import styles from './StreamStatusPanel.module.css';
 
 export const CONNECTION_LABELS: Record<EegStreamSnapshot['connection'], string> = {
   idle: 'Not started',
@@ -15,33 +16,58 @@ export const HEALTH_LABELS: Record<EegStreamSnapshot['health'], string> = {
   stale: 'Stale — no new samples',
 };
 
-function provenanceLabel(snapshot: EegStreamSnapshot): string {
+function provenanceLabel(snapshot: EegStreamSnapshot): { short: string; full: string } {
   const provenance = snapshot.metadata?.provenance;
   if (!provenance) {
-    return 'Unknown';
+    return { short: 'Unknown', full: 'Unknown' };
   }
-  return provenance.kind === 'synthetic'
-    ? `Synthetic signal — generated, not measured from a person (seed ${provenance.seed})`
-    : 'Device measurement (scalp EEG)';
+  if (provenance.kind === 'synthetic') {
+    return {
+      short: 'Synthetic EEG',
+      full: `Synthetic signal — generated, not measured from a person (seed ${provenance.seed})`,
+    };
+  }
+  return { short: 'Device EEG', full: 'Device measurement (scalp EEG)' };
 }
 
 export function StreamStatusPanel({ snapshot }: { snapshot: EegStreamSnapshot }) {
+  const provenance = provenanceLabel(snapshot);
+  const live = snapshot.connection === 'open' && snapshot.health === 'live';
+
+  return (
+    <section className={styles.panel} aria-label="EEG stream status">
+      <div className={styles.summary} data-testid="provenance">
+        <p className={styles.pill}>
+          <span className={live ? styles.dotLive : styles.dot} aria-hidden="true" />
+          <span>{provenance.short}</span>
+        </p>
+        {provenance.full === provenance.short ? null : <p className={styles.detail}>{provenance.full}</p>}
+        <p className={styles.connection} role="status" aria-live="polite">
+          {CONNECTION_LABELS[snapshot.connection]}
+          {snapshot.connection === 'reconnecting' ? ` (attempt ${snapshot.reconnectAttempt})` : ''}
+          {' · '}
+          {HEALTH_LABELS[snapshot.health]}
+        </p>
+      </div>
+      {snapshot.lastProtocolError ? (
+        <p role="alert">
+          Last rejected message ({snapshot.lastProtocolError.kind}): {snapshot.lastProtocolError.detail}
+        </p>
+      ) : null}
+    </section>
+  );
+}
+
+export function StreamDetails({ snapshot }: { snapshot: EegStreamSnapshot }) {
   const { metadata, engineStatus, integrity, lastBlock } = snapshot;
   const channels = metadata?.channels ?? [];
   const references = [...new Set(channels.map((c) => c.reference))].join(', ');
   const rate = engineStatus?.counters.effectiveSampleRateHz;
 
   return (
-    <section aria-label="EEG stream status">
-      <p role="status" aria-live="polite">
-        EEG stream: {CONNECTION_LABELS[snapshot.connection]}
-        {snapshot.connection === 'reconnecting' ? ` (attempt ${snapshot.reconnectAttempt})` : ''}
-        {' · '}
-        {HEALTH_LABELS[snapshot.health]}
-      </p>
+    <section className={styles.card} aria-label="Stream details">
+      <h2 className={styles.cardTitle}>Stream details</h2>
       <dl>
-        <dt>Source</dt>
-        <dd data-testid="provenance">{provenanceLabel(snapshot)}</dd>
         <dt>Device</dt>
         <dd>{metadata ? `${metadata.device.model} (${metadata.device.kind})` : '—'}</dd>
         <dt>Channels</dt>
@@ -69,11 +95,6 @@ export function StreamStatusPanel({ snapshot }: { snapshot: EegStreamSnapshot })
             `sample consumer errors ${snapshot.listenerErrors}`}
         </dd>
       </dl>
-      {snapshot.lastProtocolError ? (
-        <p role="alert">
-          Last rejected message ({snapshot.lastProtocolError.kind}): {snapshot.lastProtocolError.detail}
-        </p>
-      ) : null}
     </section>
   );
 }

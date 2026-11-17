@@ -2,7 +2,7 @@ import { render, screen } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
 import { emptyIntegrityCounters, type StreamMetadata } from '@neuro-observatory/protocol';
 import type { EegStreamSnapshot } from './eegStreamClient';
-import { StreamStatusPanel } from './StreamStatusPanel';
+import { StreamDetails, StreamStatusPanel } from './StreamStatusPanel';
 import { engineUrlFromEnv } from './useEegStream';
 
 const metadata: StreamMetadata = {
@@ -46,9 +46,17 @@ function snapshot(overrides: Partial<EegStreamSnapshot> = {}): EegStreamSnapshot
 
 describe('StreamStatusPanel', () => {
   it('labels synthetic data and shows units, rate and integrity counters', () => {
-    render(<StreamStatusPanel snapshot={snapshot()} />);
+    render(
+      <>
+        <StreamStatusPanel snapshot={snapshot()} />
+        <StreamDetails snapshot={snapshot()} />
+      </>,
+    );
     expect(screen.getByTestId('provenance').textContent).toContain('Synthetic signal');
     expect(screen.getByTestId('provenance').textContent).toContain('seed 7');
+    expect(screen.getByRole('status').textContent).toContain('Connected');
+    expect(screen.getByRole('status').textContent).toContain('Live');
+    expect(screen.getByRole('region', { name: 'Stream details' }).querySelector('details')).toBeNull();
     expect(screen.getByText(/16 × µV, reference synthetic, channel-major/)).toBeTruthy();
     expect(screen.getByText(/125 Hz nominal/)).toBeTruthy();
     expect(screen.getByText('99')).toBeTruthy();
@@ -62,7 +70,7 @@ describe('StreamStatusPanel', () => {
   it('shows waiting, stale, reconnecting and incompatible states', () => {
     const { rerender } = render(<StreamStatusPanel snapshot={snapshot({ connection: 'connecting', health: 'waiting', metadata: null, lastBlock: null })} />);
     expect(screen.getByRole('status').textContent).toContain('Connecting');
-    expect(screen.getByTestId('provenance').textContent).toBe('Unknown');
+    expect(screen.getByTestId('provenance').textContent).toContain('Unknown');
 
     rerender(<StreamStatusPanel snapshot={snapshot({ health: 'stale' })} />);
     expect(screen.getByRole('status').textContent).toContain('Stale');
@@ -84,7 +92,7 @@ describe('StreamStatusPanel', () => {
 
   it('labels device provenance distinctly from synthetic data', () => {
     render(<StreamStatusPanel snapshot={snapshot({ metadata: { ...metadata, provenance: { kind: 'device' } } })} />);
-    expect(screen.getByTestId('provenance').textContent).toBe('Device measurement (scalp EEG)');
+    expect(screen.getByTestId('provenance').textContent).toContain('Device measurement (scalp EEG)');
   });
 });
 

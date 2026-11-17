@@ -1,0 +1,270 @@
+.viewport {
+  position: relative;
+  min-width: 0;
+  min-height: 0;
+  background: var(--scene-bg, #0c1624);
+}
+
+.scene {
+  position: absolute;
+  inset: 0;
+  background-color: var(--scene-bg, #0c1624);
+  background-image:
+    linear-gradient(to right, rgba(120, 160, 190, 0.14) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(120, 160, 190, 0.14) 1px, transparent 1px);
+  background-size: 56px 56px;
+}
+
+.sceneTitle,
+.reset,
+.hint,
+.legend {
+  position: absolute;
+  z-index: 2;
+}
+
+.sceneTitle {
+  top: 14px;
+  left: 16px;
+  margin: 0;
+  font-size: 16px;
+  font-weight: 600;
+  pointer-events: none;
+}
+
+.reset {
+  top: 12px;
+  right: 12px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px;
+  color: var(--text, #e7edf5);
+  background: rgba(16, 24, 38, 0.88);
+  border: 1px solid var(--line, #243246);
+  border-radius: 8px;
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.reset:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.hint,
+.legend,
+.caveat {
+  bottom: 12px;
+  margin: 0;
+  color: var(--muted, #8ea0b5);
+  font-size: 12px;
+  pointer-events: none;
+}
+
+.caveat {
+  left: 16px;
+  bottom: 32px;
+  max-width: calc(100% - 200px);
+}
+
+.hint {
+  left: 16px;
+}
+
+.legend {
+  right: 16px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--accent-violet, #c4b5fd);
+}
+
+.legendDot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--accent-violet, #c4b5fd);
+}
+
+.status,
+.alert {
+  position: absolute;
+  top: 46px;
+  left: 16px;
+  max-width: calc(100% - 32px);
+  z-index: 1;
+}
+
+.status {
+  pointer-events: none;
+}
+
+.inspector {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  color: var(--text, #e7edf5);
+  font-size: 13px;
+}
+
+.panelTitle {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 650;
+}
+
+.modes {
+  display: flex;
+  flex-direction: column;
+  gap: 22px;
+  margin: 4px 0 0;
+}
+
+.modeLabel,
+.kicker {
+  color: var(--muted, #a8b0bd);
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.modeLabel {
+  margin: 0 0 8px;
+}
+
+.group {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.option {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  padding: 8px 10px;
+  border: 1px solid var(--line, #243246);
+  border-radius: 8px;
+  color: var(--muted, #8ea0b5);
+  cursor: pointer;
+}
+
+.group .option {
+  border-color: transparent;
+  padding-left: 12px;
+}
+
+.option input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: 0;
+  opacity: 0;
+}
+
+.option:has(:focus-visible) {
+  outline: 2px solid var(--accent-cyan, #3cf0ff);
+  outline-offset: 2px;
+}
+
+.group .option:has(:checked) {
+  font-weight: 650;
+  color: var(--text, #e7edf5);
+  background: var(--surface-2, #182333);
+  box-shadow: inset 3px 0 0 var(--accent-cyan, #3cf0ff);
+}
+
+.option:has(:disabled) {
+  color: var(--muted, #8ea0b5);
+  opacity: 0.45;
+  cursor: default;
+}
+
+.switch {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.switch input {
+  appearance: none;
+  width: 38px;
+  height: 22px;
+  margin: 0;
+  border-radius: 999px;
+  background: #2a3848;
+  position: relative;
+  cursor: pointer;
+}
+
+.switch input::after {
+  content: '';
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: #f4fbff;
+}
+
+.switch input:checked {
+  background: #1aa4c4;
+}
+
+.switch input:checked::after {
+  left: 19px;
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-bottom: 8px;
+}
+
+.field select,
+.action {
+  font: inherit;
+  color: var(--text, #e6e8ee);
+  background: var(--surface-2, #222833);
+  border: 1px solid var(--line, #2e3644);
+  border-radius: 4px;
+  padding: 4px 6px;
+}
+
+.check {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 4px 0;
+  color: var(--muted, #8ea0b5);
+  font-size: 13px;
+  font-weight: 400;
+  letter-spacing: normal;
+  text-transform: none;
+}
+
+.note {
+  margin: 0;
+  color: var(--muted, #a8b0bd);
+}
+
+.provenance {
+  margin: 0;
+}
+
+.provenance dt {
+  color: var(--muted, #a8b0bd);
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.provenance dd {
+  margin: 0 0 8px;
+}

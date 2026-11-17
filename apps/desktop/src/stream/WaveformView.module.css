@@ -1,0 +1,99 @@
+.figure {
+  margin: 0;
+  padding: 10px 16px 12px;
+  color: var(--text);
+}
+
+.bar {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 6px;
+}
+
+.heading {
+  font-size: 16px;
+  font-weight: 650;
+  letter-spacing: 0;
+  text-transform: none;
+  margin: 0;
+}
+
+.scale {
+  margin: 0;
+  color: var(--muted);
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.note {
+  margin: 0 0 8px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.notes {
+  margin: 0 0 8px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.notes summary {
+  cursor: pointer;
+}
+
+.plot {
+  display: grid;
+  grid-template-columns: 4.5rem minmax(0, 1fr);
+  height: 480px;
+  min-height: 480px;
+  width: 100%;
+}
+
+.labels {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  height: 100%;
+  min-height: 0;
+}
+
+.channel {
+  appearance: none;
+  background: transparent;
+  border: 0;
+  border-left: 3px solid transparent;
+  color: var(--muted);
+  font: inherit;
+  font-size: 12px;
+  width: 100%;
+  height: 100%;
+  text-align: right;
+  padding: 0 8px 0 6px;
+  cursor: pointer;
+}
+
+.channel[aria-pressed='true'] {
+  color: var(--accent-violet);
+  font-weight: 700;
+  border-left-color: var(--accent-violet);
+  background: rgba(196, 181, 253, 0.14);
+  border-radius: 4px;
+}
+
+.canvasSlot {
+  position: relative;
+  min-width: 0;
+  min-height: 0;
+  height: 100%;
+}
+
+.canvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  display: block;
+}

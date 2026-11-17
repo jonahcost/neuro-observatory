@@ -1,7 +1,9 @@
 import { useEffect, useRef, useSyncExternalStore } from 'react';
+import { ACCENT_VIOLET } from '../theme';
 import type { EegStreamSnapshot } from './eegStreamClient';
 import { CONNECTION_LABELS, HEALTH_LABELS } from './StreamStatusPanel';
 import { LANE_HALF_RANGE_UV, TIME_AXIS_PX, WINDOW_SECONDS, type RestartCause, type WaveformBuffer } from './waveformBuffer';
+import styles from './WaveformView.module.css';
 
 function unitLabel(unit: string): string {
   return unit === 'uV' ? 'µV' : unit;
@@ -17,9 +19,35 @@ function restartNote(cause: RestartCause | null): string {
   return '';
 }
 
-export function WaveformView({ buffer, snapshot }: { buffer: WaveformBuffer; snapshot: EegStreamSnapshot }) {
+export function WaveformView({
+  buffer,
+  snapshot,
+  selectedChannel = null,
+  onSelectChannel,
+}: {
+  buffer: WaveformBuffer;
+  snapshot: EegStreamSnapshot;
+  selectedChannel?: string | null;
+  onSelectChannel?: (label: string | null) => void;
+}) {
   const chrome = useSyncExternalStore(buffer.subscribe, buffer.getChrome);
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const emphasisRef = useRef<{ index: number; color: string } | null>(null);
+  const layoutEpochRef = useRef(chrome.layoutEpoch);
+  const labels = chrome.labels;
+  const selectedIndex = selectedChannel === null ? -1 : labels.indexOf(selectedChannel);
+  emphasisRef.current = selectedIndex < 0 ? null : { index: selectedIndex, color: ACCENT_VIOLET };
+
+  useEffect(() => {
+    const epochChanged = layoutEpochRef.current !== chrome.layoutEpoch;
+    layoutEpochRef.current = chrome.layoutEpoch;
+    if (!onSelectChannel || selectedChannel === null) {
+      return;
+    }
+    if (epochChanged || !labels.includes(selectedChannel)) {
+      onSelectChannel(null);
+    }
+  }, [chrome.layoutEpoch, labels, onSelectChannel, selectedChannel]);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -46,7 +74,7 @@ export function WaveformView({ buffer, snapshot }: { buffer: WaveformBuffer; sna
         if (context) {
           context.setTransform(dpr, 0, 0, dpr, 0, 0);
           context.clearRect(0, 0, cssWidth, cssHeight);
-          buffer.paint(context, cssWidth, cssHeight);
+          buffer.paint(context, cssWidth, cssHeight, emphasisRef.current);
         }
       }
       frame = requestAnimationFrame(draw);
@@ -58,68 +86,64 @@ export function WaveformView({ buffer, snapshot }: { buffer: WaveformBuffer; sna
     };
   }, [buffer]);
 
-  const labels = chrome.labels;
   const shownUnit = unitLabel(chrome.unit);
-  const clockNote = restartNote(chrome.restartCause);
+  const clockNote = restartNote(chrome.restartCause).trim();
+  const syntheticNote = chrome.synthetic ? 'Synthetic signal — generated, not measured from a person.' : '';
 
   return (
-    <section aria-label="EEG waveforms" style={{ marginTop: 16 }}>
-      <h2 style={{ fontSize: 16, fontWeight: 600, margin: '0 0 8px' }}>Live EEG</h2>
-      <p role="status" aria-live="polite" style={{ margin: '0 0 8px' }}>
+    <section id="signals" className={styles.figure} aria-label="EEG waveforms">
+      <div className={styles.bar}>
+        <h2 className={styles.heading}>EEG Waveforms</h2>
+        <p className={styles.scale}>
+          {WINDOW_SECONDS} s window · ±{LANE_HALF_RANGE_UV} {shownUnit}
+        </p>
+      </div>
+      <p role="status" aria-live="polite" className={styles.note}>
         {CONNECTION_LABELS[snapshot.connection]}
         {snapshot.connection === 'reconnecting' ? ` (attempt ${snapshot.reconnectAttempt})` : ''}
         {' · '}
         {HEALTH_LABELS[snapshot.health]}
       </p>
-      <p style={{ margin: '0 0 8px', color: '#cbd5e1' }}>
-        {chrome.synthetic ? 'Synthetic signal — generated, not measured from a person. ' : ''}
-        {labels.length > 0
-          ? `${labels.length} channels · ±${LANE_HALF_RANGE_UV} ${shownUnit} · ${WINDOW_SECONDS} s window at ${chrome.rateHz} Hz nominal. Time is seconds before the newest sample, using the stream's nominal sample spacing.${clockNote}`
-          : 'Waiting for EEG samples.'}
-      </p>
+      {syntheticNote || clockNote ? (
+        <p className={styles.note}>
+          {syntheticNote}
+          {syntheticNote && clockNote ? ' ' : ''}
+          {clockNote}
+        </p>
+      ) : null}
+      {labels.length === 0 ? <p className={styles.note}>Waiting for EEG samples.</p> : null}
+      <details className={styles.notes}>
+        <summary>Trace notes</summary>
+        <p className={styles.note}>
+          {labels.length > 0
+            ? `${labels.length} channels · ±${LANE_HALF_RANGE_UV} ${shownUnit} · ${WINDOW_SECONDS} s window at ${chrome.rateHz} Hz nominal. Time is seconds before the newest sample, using the stream's nominal sample spacing.`
+            : 'Waiting for channel layout.'}
+        </p>
+      </details>
       {chrome.error ? <p role="alert">{chrome.error}</p> : null}
-      <div
-        style={{
-          display: 'grid',
-          gridTemplateColumns: '4.5rem minmax(0, 1fr)',
-          height: 480,
-          width: '100%',
-        }}
-      >
+      <div className={styles.plot}>
         <ol
+          className={styles.labels}
           style={{
-            listStyle: 'none',
-            margin: 0,
-            padding: 0,
-            display: 'grid',
             gridTemplateRows: labels.length > 0 ? `repeat(${labels.length}, 1fr) ${TIME_AXIS_PX}px` : '1fr',
-            height: '100%',
           }}
         >
           {labels.map((label, index) => (
-            <li
-              key={`${index}-${label}`}
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'flex-end',
-                paddingRight: 8,
-                fontSize: 12,
-                color: '#cbd5e1',
-              }}
-            >
-              {label}
+            <li key={`${index}-${label}`}>
+              <button
+                type="button"
+                className={styles.channel}
+                aria-pressed={selectedChannel === label}
+                onClick={() => onSelectChannel?.(label)}
+              >
+                {label}
+              </button>
             </li>
           ))}
           {labels.length > 0 ? <li aria-hidden="true" /> : null}
         </ol>
-        <div style={{ position: 'relative', minWidth: 0, minHeight: 0, height: '100%' }}>
-          <canvas
-            ref={canvasRef}
-            aria-hidden="true"
-            data-testid="eeg-waveform-canvas"
-            style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', display: 'block' }}
-          />
+        <div className={styles.canvasSlot}>
+          <canvas ref={canvasRef} aria-hidden="true" data-testid="eeg-waveform-canvas" className={styles.canvas} />
         </div>
       </div>
     </section>
