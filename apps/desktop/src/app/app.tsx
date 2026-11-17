@@ -1,13 +1,21 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { anatomyApiUrlFromEnv, createAnatomyClient } from '../anatomy/anatomyClient';
 import { AnatomyViewer } from '../anatomy/AnatomyViewer';
 import { EegStreamClient } from '../stream/eegStreamClient';
 import { StreamStatusPanel } from '../stream/StreamStatusPanel';
 import { engineUrlFromEnv, useEegStream } from '../stream/useEegStream';
+import { WaveformBuffer } from '../stream/waveformBuffer';
+import { WaveformView } from '../stream/WaveformView';
 
 export function App() {
   const [client] = useState(() => new EegStreamClient({ url: engineUrlFromEnv(import.meta.env) }));
   const [anatomyClient] = useState(() => createAnatomyClient({ baseUrl: anatomyApiUrlFromEnv(import.meta.env) }));
+  const [buffer] = useState(() => new WaveformBuffer());
+  useEffect(() => {
+    return client.onBlock((block, metadata) => {
+      buffer.append(block, metadata, performance.now());
+    });
+  }, [buffer, client]);
   const snapshot = useEegStream(client);
 
   return (
@@ -23,6 +31,8 @@ export function App() {
       <h1>Neuro Observatory</h1>
 
       <StreamStatusPanel snapshot={snapshot} />
+
+      <WaveformView buffer={buffer} snapshot={snapshot} />
 
       <AnatomyViewer client={anatomyClient} />
     </main>
