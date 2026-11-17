@@ -37,6 +37,10 @@ Recording files live under the engine data root. Replay replaces the single-use 
 
 ADR-0016 stays Proposed until the owner marks it Accepted. The governance PR check requires that status, so this branch is not merge-ready until then. EEGMMIDB import is manual and is not part of CI. Renderer frame interval was not measured in a browser rAF loop; see the benchmark record.
 
+## Post-review correction
+
+The original checks replayed the gap-free alpha-step file. A later probe showed declared gaps were collapsed, pause did not hold the replay schedule, and a seek to the alpha finding could not lock a new baseline. Those corrections are in `docs/work/completed/WORK-2026-11-17-milestone-04a-review-remediation.md`.
+
 ## Human Review
 
 The owner directed implementation of the 04A plan on 2026-11-17. This record does not mark ADR-0016 Accepted.

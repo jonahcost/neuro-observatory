@@ -27,14 +27,30 @@ export interface AssistantSelection {
   displayMode: DisplayModeId | null;
 }
 
-async function postJson(url: string, body: unknown, signal: AbortSignal): Promise<unknown> {
+interface Posted {
+  ok: boolean;
+  body: unknown;
+}
+
+function errorMessage(body: unknown, fallback: string): string {
+  if (typeof body === 'object' && body !== null && 'error' in body) {
+    const error = (body as { error?: { message?: unknown } }).error;
+    if (typeof error?.message === 'string' && error.message.length > 0) {
+      return error.message;
+    }
+  }
+  return fallback;
+}
+
+async function postJson(url: string, body: unknown, signal: AbortSignal): Promise<Posted> {
   const response = await fetch(url, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify(body),
     signal,
   });
-  return response.json();
+  const payload: unknown = await response.json().catch(() => null);
+  return { ok: response.ok, body: payload };
 }
 
 export function AssistantPanel({
@@ -98,15 +114,25 @@ export function AssistantPanel({
     if (!selection.seek) {
       return;
     }
-    void postJson(`${baseUrl}/session`, { action: 'seek', sampleIndex: finding.firstSampleIndex }, new AbortController().signal).catch(() => {
-      setReply('The replay seek did not complete. The EEG socket stayed open.');
-    });
+    void postJson(`${baseUrl}/session`, { action: 'seek', sampleIndex: finding.firstSampleIndex }, new AbortController().signal)
+      .then((posted) => {
+        if (!posted.ok) {
+          setReply(errorMessage(posted.body, 'The replay seek did not complete. The EEG socket stayed open.'));
+        }
+      })
+      .catch(() => {
+        setReply('The replay seek did not complete. The EEG socket stayed open.');
+      });
   };
 
   const send = async (body: unknown) => {
     try {
-      const payload = await postJson(`${baseUrl}/intent`, body, new AbortController().signal);
-      const parsed = parseIntentResult(JSON.stringify(payload));
+      const posted = await postJson(`${baseUrl}/intent`, body, new AbortController().signal);
+      if (!posted.ok) {
+        setReply(errorMessage(posted.body, 'The assistant command did not complete. The EEG view is unchanged.'));
+        return;
+      }
+      const parsed = parseIntentResult(JSON.stringify(posted.body));
       if (!parsed.ok) {
         setReply('That reply was not a valid assistant result. The EEG view is unchanged.');
         return;
@@ -126,7 +152,10 @@ export function AssistantPanel({
 
   const session = async (body: unknown) => {
     try {
-      await postJson(`${baseUrl}/session`, body, new AbortController().signal);
+      const posted = await postJson(`${baseUrl}/session`, body, new AbortController().signal);
+      if (!posted.ok) {
+        setReply(errorMessage(posted.body, 'The session command did not complete. The waveform stayed on the current socket.'));
+      }
     } catch {
       setReply('The session command did not complete. The waveform stayed on the current socket.');
     }
@@ -192,6 +221,7 @@ export function AssistantPanel({
               </button>
               <p className={styles.note}>
                 {item.method} {item.band} · samples {item.firstSampleIndex}–{item.lastSampleIndex}
+                {item.quality !== 'good' ? ` · ${item.quality}` : ''}
                 {item.synthetic ? ' · synthetic' : ''}
               </p>
             </li>

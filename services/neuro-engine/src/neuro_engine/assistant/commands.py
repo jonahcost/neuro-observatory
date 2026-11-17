@@ -183,7 +183,7 @@ async def _seek(proposal: dict[str, object], session: SessionController, store: 
         same_recording = [
             item
             for item in store.findings
-            if item.recording_id == session.recording_id and item.quality == "good"
+            if item.recording_id == session.recording_id and item.quality in {"good", "stale"}
         ]
     else:
         same_recording = [item for item in current if item.quality == "good"]
@@ -295,6 +295,13 @@ def _answer(proposal: dict[str, object], session: SessionController, store: Find
                 message="I could not tie that claim to a current finding.",
             )
         findings = [item for item in findings if item.finding_id in set(map(str, supplied))]
+    if question != "changed-most" and proposal.get("answer") and not (isinstance(supplied, list) and supplied):
+        return _result(
+            session,
+            ok=False,
+            intent="answer",
+            message="I could not tie that claim to a current finding.",
+        )
     if question == "changed-most" or not proposal.get("answer"):
         if not findings:
             evidence = session.analyzer.evidence
@@ -317,18 +324,48 @@ def _answer(proposal: dict[str, object], session: SessionController, store: Find
             bits.append(
                 f"{label} {channel.change_db:+.1f} dB ({finding.band}, samples {finding.first_sample_index}–{finding.last_sample_index})"
             )
+        message = "The largest changes I can cite are " + "; ".join(bits) + "."
+        if any(finding.synthetic for _, finding, _ in chosen):
+            message += " Synthetic signal — generated, not measured from a person."
         return _result(
             session,
             ok=True,
             intent="answer",
-            message="The largest changes I can cite are " + "; ".join(bits) + ".",
+            message=message,
             channels=[label for _, _, label in chosen],
             primary=chosen[0][2],
             finding_ids=ids,
         )
-    text = str(proposal.get("answer") or "")
-    ids = [str(item) for item in supplied] if isinstance(supplied, list) else []
-    return _result(session, ok=True, intent="answer", message=text[:400] or "I don't have more to add from the current findings.", finding_ids=ids)
+    if not findings:
+        return _result(
+            session,
+            ok=False,
+            intent="answer",
+            message="I could not tie that claim to a current finding.",
+        )
+    return _result(
+        session,
+        ok=True,
+        intent="answer",
+        message=_cited_answer(findings),
+        channels=[channel.label for finding in findings for channel in finding.channels],
+        primary=findings[0].channels[0].label,
+        finding_ids=[item.finding_id for item in findings],
+    )
+
+
+def _cited_answer(findings: list[Finding]) -> str:
+    bits = []
+    for finding in findings:
+        for channel in finding.channels:
+            bits.append(
+                f"{channel.label} {channel.change_db:+.1f} dB "
+                f"({finding.band}, samples {finding.first_sample_index}–{finding.last_sample_index})"
+            )
+    text = "The findings I can cite are " + "; ".join(bits) + "."
+    if any(item.synthetic for item in findings):
+        text += " Synthetic signal — generated, not measured from a person."
+    return text
 
 
 def stream_running(session: SessionController) -> bool:

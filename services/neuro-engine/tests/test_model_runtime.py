@@ -35,3 +35,17 @@ def test_startup_without_a_manifest_stays_unavailable(tmp_path: Path) -> None:
 
     assert asyncio.run(start()) == "not-installed"
     assert runtime.status == "unavailable"
+
+
+def test_cancel_closes_the_inflight_connection(tmp_path: Path) -> None:
+    runtime = LlamaRuntime(tmp_path, enabled=False)
+    closed = {"value": False}
+
+    class _Connection:
+        def close(self) -> None:
+            closed["value"] = True
+
+    runtime._connection = _Connection()  # type: ignore[assignment]
+    runtime.cancel()
+    assert closed["value"] is True
+    assert runtime._connection is None

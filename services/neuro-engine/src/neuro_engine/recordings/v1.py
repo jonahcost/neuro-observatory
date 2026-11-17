@@ -59,6 +59,18 @@ def _sha256(samples: np.ndarray) -> str:
     return "sha256:" + hashlib.sha256(blob.tobytes()).hexdigest()
 
 
+def _manifest_sha256(manifest: dict[str, object]) -> str:
+    """Checksum of the metadata that interprets the sample blob.
+
+    The sample digest is excluded from this input only by living inside the
+    document that is hashed; `manifestSha256` itself is omitted so the digest
+    can be stored beside it.
+    """
+    body = {key: value for key, value in manifest.items() if key != "manifestSha256"}
+    raw = json.dumps(body, sort_keys=True, separators=(",", ":")).encode()
+    return "sha256:" + hashlib.sha256(raw).hexdigest()
+
+
 def _check_id(recording_id: str) -> str:
     if RECORDING_ID.fullmatch(recording_id) is None:
         raise RecordingError("invalid-recording-id", "recording id must be a lowercase slug")
@@ -157,6 +169,7 @@ def write_recording(
         ],
         "gaps": [{"firstIndex": gap.first_index, "count": gap.count} for gap in gaps],
     }
+    manifest["manifestSha256"] = _manifest_sha256(manifest)
     (directory / "manifest.json").write_text(json.dumps(manifest, indent=2, sort_keys=True) + "\n", encoding="utf-8")
     return Recording(recording_id, array, descriptor, gaps, directory)
 
@@ -172,10 +185,16 @@ def read_recording(directory: Path) -> Recording:
     if not isinstance(manifest, dict) or manifest.get("schemaVersion") != 1:
         raise RecordingError("invalid-manifest", "recording manifest must be schemaVersion 1")
     recording_id = _check_id(str(manifest.get("recordingId", "")))
+    digest = manifest.get("manifestSha256")
+    if not isinstance(digest, str) or digest != _manifest_sha256(manifest):
+        raise RecordingError("checksum-mismatch", "manifest checksum does not match the recording metadata")
     sample_count = int(manifest["sampleCount"])
     channels_doc = manifest["channels"]
     if not isinstance(channels_doc, list) or not channels_doc:
         raise RecordingError("invalid-manifest", "recording needs at least one channel")
+    for position, item in enumerate(channels_doc):
+        if int(item["index"]) != position:
+            raise RecordingError("invalid-manifest", "channel index must match its position in the manifest")
     channels = tuple(
         ChannelSpec(
             label=item["label"],

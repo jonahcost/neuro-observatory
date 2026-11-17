@@ -12,7 +12,11 @@ from neuro_engine.acquisition.base import DeviceAdapter
 from neuro_engine.acquisition.clock import Clock, MonotonicClock
 from neuro_engine.acquisition.service import AcquisitionService
 from neuro_engine.acquisition.synthetic import SyntheticEegAdapter
-from neuro_engine.analysis.band_power import BandPowerAnalyzer, FindingStore
+from neuro_engine.analysis.band_power import (
+    BandPowerAnalyzer,
+    FindingStore,
+    observe_acquisition_health,
+)
 from neuro_engine.api import anatomy, assistant, http, ws
 from neuro_engine.assistant.runtime import LlamaRuntime
 from neuro_engine.assistant.service import AssistantService
@@ -62,8 +66,15 @@ def create_app(
             enabled=resolved_settings.assistant_enabled,
         )
         service = AcquisitionService(factory, hub, resolved_clock, reconnect=resolved_settings.reconnect)
-        service.add_accepted_listener(band.on_accepted)
-        session = SessionController(service, resolved_settings, resolved_clock, data_root.path / "recordings", band)
+        observe_acquisition_health(service, band)
+        session = SessionController(
+            service,
+            resolved_settings,
+            resolved_clock,
+            data_root.path / "recordings",
+            band,
+            on_cancel=model.cancel,
+        )
         assistant_service = AssistantService(session, findings, model)
         runtime = EngineRuntime(
             resolved_settings,

@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import asyncio
 import hashlib
+import http.client
 import json
 import shutil
 from pathlib import Path
@@ -61,10 +62,15 @@ class LlamaRuntime:
         self.reason = "not-installed"
         self._process: asyncio.subprocess.Process | None = None
         self._inflight: asyncio.Task[Any] | None = None
+        self._connection: http.client.HTTPConnection | None = None
         self._transport = None
         self._manifest: dict[str, Any] | None = None
 
     def cancel(self) -> None:
+        connection = self._connection
+        self._connection = None
+        if connection is not None:
+            connection.close()
         task = self._inflight
         if task is not None and not task.done():
             task.cancel()
@@ -215,11 +221,18 @@ class LlamaRuntime:
             },
         }
         body = json.dumps(payload).encode()
-        req = request.Request(
-            f"http://127.0.0.1:{self.port}/v1/chat/completions",
-            data=body,
-            headers={"Content-Type": "application/json"},
-            method="POST",
-        )
-        with request.urlopen(req, timeout=30) as response:
+        connection = http.client.HTTPConnection("127.0.0.1", self.port, timeout=30)
+        self._connection = connection
+        try:
+            connection.request(
+                "POST",
+                "/v1/chat/completions",
+                body=body,
+                headers={"Content-Type": "application/json"},
+            )
+            response = connection.getresponse()
             return json.loads(response.read().decode())
+        finally:
+            connection.close()
+            if self._connection is connection:
+                self._connection = None

@@ -19,9 +19,9 @@ Verified on `04A/live-eeg-assistant` at `ffcb296`:
 
 1. **EEG v2 stays one-way.** Findings, session control, and commands are a new loopback contract, `assistant.v1`, under `/api/assistant/v1`. They are not added to `eeg.block`.
 2. **`recording.v1` is a local directory.** `manifest.json` plus little-endian float64 `samples.f64` in channel-major order, with declared gap ranges. The desktop does not read the file. Replay samples are not committed.
-3. **`ReplayEegAdapter` implements `DeviceAdapter`.** Seek and source changes stop the current adapter and open a new one, which already issues a new `streamId`. Pause holds only the replay clock. The default lifespan source remains the existing synthetic adapter, and its config hash is unchanged.
+3. **`ReplayEegAdapter` implements `DeviceAdapter`.** Seek and source changes stop the current adapter and open a new one, which already issues a new `streamId`. Pause adds the time spent paused to later block deadlines, so resume continues at the next sample instead of catching up to the wall clock. Declared gap indexes are emitted as index holes. The default lifespan source remains the existing synthetic adapter, and its config hash is unchanged.
 4. **Analysis taps accepted blocks inside the engine** after gap accounting, not the live-view WebSocket. A 60 s history drops the oldest raw samples and counts them. It does not invent samples. Windows are 2.0 s with a 0.5 s step. Narrated bands are theta 4–8 Hz, alpha 8–13 Hz, and beta 13–30 Hz, in µV², compared with the median baseline in dB. The baseline locks after 20 s of accepted windows or an explicit lock. A new stream clears it unless the caller passes keep-baseline.
-5. **A finding stores summaries, not raw samples:** identity, sample-index range, monotonic times, channel labels, reference, method version, powers, baseline, dB change, and quality. The store keeps the latest 200 findings or 30 minutes. Answers may cite only ids that were supplied.
+5. **A finding stores summaries, not raw samples:** identity, sample-index range, monotonic times, channel labels, reference, method version, powers, baseline, dB change, and quality. The store keeps the latest 200 findings or 30 minutes. A new stream marks older findings `stale`. Answers may cite only ids from the current generation. Seek of a stale finding is allowed only when its recording id is the open recording.
 6. **Commands are a closed lexicon** validated against the current montage and display modes: emphasize the posterior labels that are present (`O1`, `O2`, `Pz`, `P3`, `P4`), seek a finding only when the open recording still contains it, add a derived marker, lock the baseline, or set a display mode. Ambiguous or stale requests change nothing.
 
 ## Alternatives Considered
@@ -33,7 +33,7 @@ Verified on `04A/live-eeg-assistant` at `ffcb296`:
 
 ## Consequences
 
-Replay and templates work without a language model. Seek starts a new stream, so in-flight answers from the old generation are discarded. Spectral estimates are scalp measurements in the declared reference, not cortical source estimates. Gaps are not filled; a window missing more than 5% of its samples produces no qualified finding. Imported device files keep their original labels. Engine timestamps for those files are the playback clock.
+Replay and templates work without a language model. Seek starts a new stream, so in-flight answers from the old generation are discarded. Spectral estimates are scalp measurements in the declared reference, not cortical source estimates. Replay keeps declared gap indexes as holes. A window missing more than 5% of its samples produces no qualified finding. A smaller hole is replaced by the mean of the finite samples only inside that spectral estimate, and the finding records the accepted-sample fraction. Imported EDF files keep their EEG labels, omit non-EEG channels, and are shown as file replay. Engine timestamps for those files are the playback clock. ADR-0022 records the review corrections to this proposed decision.
 
 ## Validation and Rollback
 

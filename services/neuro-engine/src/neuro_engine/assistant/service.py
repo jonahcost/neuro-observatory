@@ -73,9 +73,6 @@ class AssistantService:
             )
             return document_dict(parse_document(cancelled))
         result = await execute(proposal, self.session, self.store, requested_generation=requested)
-        if self.session.take_cancel() and result["intent"] != "cancelled":
-            # A seek already moved the generation. The result generation is the new one.
-            pass
         return document_dict(parse_document(result))
 
     async def _model_proposal(self, text: str) -> dict[str, Any]:
@@ -121,8 +118,10 @@ class AssistantService:
         try:
             payload = await self.model.complete(messages)
         except asyncio.CancelledError:
-            return {"intent": "cancelled"}
+            return {"intent": "cancelled", "clarification": "Cancelled because the session changed."}
         except (ModelUnavailable, TimeoutError, OSError, ValueError, json.JSONDecodeError):
+            if self.session.generation != started:
+                return {"intent": "cancelled", "clarification": "Cancelled because the session changed."}
             return {
                 "intent": "clarify",
                 "clarification": "The local language model is unavailable. Findings on screen are unchanged.",

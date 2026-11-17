@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+from collections.abc import Callable
 from pathlib import Path
 
 from neuro_engine.acquisition.clock import Clock
@@ -29,6 +30,7 @@ class SessionController:
         clock: Clock,
         recordings_root: Path,
         analyzer: BandPowerAnalyzer,
+        on_cancel: Callable[[], None] | None = None,
     ) -> None:
         self.service = service
         self.settings = settings
@@ -43,10 +45,13 @@ class SessionController:
         self._pause.set()
         self._lock = asyncio.Lock()
         self._cancel: asyncio.Event = asyncio.Event()
+        self._on_cancel = on_cancel
         analyzer.set_context(0, None)
 
     def request_cancel(self) -> None:
         self._cancel.set()
+        if self._on_cancel is not None:
+            self._on_cancel()
 
     def take_cancel(self) -> bool:
         if self._cancel.is_set():

@@ -5,10 +5,12 @@ import math
 import numpy as np
 
 from neuro_engine.acquisition.base import ActiveStream, SampleBlock
-from neuro_engine.acquisition.service import StreamBlock
+from neuro_engine.acquisition.service import AcquisitionHealth, StreamBlock
 from neuro_engine.analysis.band_power import (
     BandPowerAnalyzer,
     FindingStore,
+    _History,
+    observe_acquisition_health,
     periodogram_power,
 )
 from neuro_engine.recordings.scenario import alpha_step_descriptor, alpha_step_samples
@@ -124,3 +126,65 @@ def test_stale_health_suppresses_new_findings() -> None:
         )
     assert [item for item in store.findings if item.method == "band-power"] == []
     assert analyzer.evidence == "stale"
+
+
+def test_history_counts_samples_that_age_out() -> None:
+    history = _History(1, 125.0)
+    history.append(np.zeros((1, 125 * 61)), 0)
+    assert history.expired == 125
+
+
+def test_seek_past_the_original_baseline_can_still_lock() -> None:
+    samples, config, _step = alpha_step_samples()
+    descriptor = alpha_step_descriptor(config)
+    store = FindingStore()
+    analyzer = BandPowerAnalyzer(store)
+    analyzer.set_context(1, "alpha-step")
+    stream = ActiveStream("seeked", descriptor, 0, 0)
+    start = 2418
+    for cursor in range(start, samples.shape[1], 25):
+        stop = min(samples.shape[1], cursor + 25)
+        analyzer.on_accepted(stream, StreamBlock("seeked", cursor, 0, SampleBlock(cursor, cursor * 8000, samples[:, cursor:stop])))
+    assert analyzer._baseline is None
+    assert analyzer._collect
+    assert analyzer.lock_baseline() is True
+
+
+def test_a_new_stream_marks_older_findings_stale() -> None:
+    samples, config, _step = alpha_step_samples(duration_s=6.0, step_at_s=4.0)
+    descriptor = alpha_step_descriptor(config)
+    store = FindingStore()
+    analyzer = BandPowerAnalyzer(store, baseline_s=2.0)
+    first = ActiveStream("one", descriptor, 0, 0)
+    for start in range(0, samples.shape[1], 25):
+        stop = min(samples.shape[1], start + 25)
+        analyzer.on_accepted(first, StreamBlock("one", start, 0, SampleBlock(start, start * 8000, samples[:, start:stop])))
+    assert any(item.quality == "good" for item in store.findings)
+    second = ActiveStream("two", descriptor, 0, 0)
+    analyzer.on_accepted(second, StreamBlock("two", 0, 0, SampleBlock(0, 0, samples[:, :25])))
+    older = [item for item in store.findings if item.stream_id == "one"]
+    assert older
+    assert all(item.quality == "stale" for item in older)
+
+
+def test_acquisition_health_closes_the_analyzer_gate() -> None:
+    samples, config, _step = alpha_step_samples(duration_s=1.0)
+    descriptor = alpha_step_descriptor(config)
+    analyzer = BandPowerAnalyzer(FindingStore())
+    stream = ActiveStream("health", descriptor, 0, 0)
+
+    class _Service:
+        def __init__(self) -> None:
+            self.listener = None
+
+        def health(self) -> AcquisitionHealth:
+            return AcquisitionHealth(("no-recent-data",))
+
+        def add_accepted_listener(self, listener: object) -> None:
+            self.listener = listener
+
+    service = _Service()
+    observe_acquisition_health(service, analyzer)  # type: ignore[arg-type]
+    assert service.listener is not None
+    service.listener(stream, StreamBlock("health", 0, 0, SampleBlock(0, 0, samples[:, :25])))
+    assert analyzer._health_ok is False

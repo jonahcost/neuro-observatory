@@ -57,6 +57,7 @@ class ReplayEegAdapter:
         sample_index, stored = cursor
         origin = sample_index
         opened_us = self._clock.monotonic_us()
+        held_us = 0
         rate = self._descriptor.nominal_sample_rate_hz
         period_us = 1_000_000 / rate
         runs = present_runs(self._recording.sample_count, self._recording.gaps)
@@ -64,21 +65,28 @@ class ReplayEegAdapter:
             run_end_stored = run_stored + length
             if stored >= run_end_stored:
                 continue
-            if stored < run_stored:
-                stored = run_stored
-                sample_index = run_index
+            stored = max(stored, run_stored)
+            # Recompute on every run. A gap ends one run on the next run's stored
+            # offset, so `stored < run_stored` is false and must not keep the
+            # pre-gap index.
+            sample_index = run_index + (stored - run_stored)
             while stored < run_end_stored:
-                await self._pause.wait()
+                if not self._pause.is_set():
+                    paused_at = self._clock.monotonic_us()
+                    await self._pause.wait()
+                    held_us += self._clock.monotonic_us() - paused_at
                 if self._closed:
                     return
                 take = min(self._block_size, run_end_stored - stored)
                 data = np.ascontiguousarray(self._recording.samples[:, stored : stored + take])
-                await self._clock.sleep_until(opened_us + round((sample_index - origin + take) * period_us))
+                await self._clock.sleep_until(
+                    opened_us + held_us + round((sample_index - origin + take) * period_us)
+                )
                 if self._closed:
                     return
                 yield SampleBlock(
                     first_sample_index=sample_index,
-                    first_sample_time_us=opened_us + round((sample_index - origin) * period_us),
+                    first_sample_time_us=opened_us + held_us + round((sample_index - origin) * period_us),
                     data=data,
                 )
                 stored += take

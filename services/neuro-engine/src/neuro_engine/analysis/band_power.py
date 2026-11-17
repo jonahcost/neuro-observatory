@@ -12,13 +12,13 @@ from __future__ import annotations
 import math
 import uuid
 from collections import deque
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 
 import numpy as np
 
 from neuro_engine.acquisition.base import ActiveStream, SyntheticProvenance
-from neuro_engine.acquisition.service import StreamBlock
-from neuro_engine.analysis.blink import blink_verdict
+from neuro_engine.acquisition.service import AcquisitionService, StreamBlock
+from neuro_engine.analysis.blink import blink_verdict, louder_occipital
 
 METHOD = "band-power"
 METHOD_VERSION = "1"
@@ -158,6 +158,16 @@ class FindingStore:
         self.findings.append(finding)
         self._trim(finding.created_us)
 
+    def mark_other_streams_stale(self, stream_id: str) -> None:
+        """Findings from an older stream stay queryable and stop looking current."""
+        kept: deque[Finding] = deque()
+        for finding in self.findings:
+            if finding.stream_id != stream_id and finding.quality == "good":
+                kept.append(replace(finding, quality="stale"))
+            else:
+                kept.append(finding)
+        self.findings = kept
+
     def add_line(self, line: str) -> None:
         self.lines.append(line)
 
@@ -214,7 +224,7 @@ class _History:
             index = first_index + offset
             slot = index % self.capacity
             previous = int(self.indexes[slot])
-            if previous >= 0 and previous != index and 0 <= index - previous < self.capacity:
+            if previous >= 0 and previous != index:
                 self.expired += 1
             self.values[:, slot] = data[:, offset]
             self.indexes[slot] = index
@@ -281,6 +291,7 @@ class BandPowerAnalyzer:
         self._baseline_n = 0
         self._anchor_index: int | None = None
         self._anchor_us = 0
+        self._origin_index: int | None = None
         self._blinked_until = -1
 
     @property
@@ -323,6 +334,8 @@ class BandPowerAnalyzer:
 
     def on_accepted(self, stream: ActiveStream, block: StreamBlock) -> None:
         if self._stream is None or self._stream.stream_id != stream.stream_id:
+            if self._stream is not None:
+                self.store.mark_other_streams_stale(stream.stream_id)
             kept = self._baseline if self._keep_baseline else None
             self._reset(stream)
             if kept:
@@ -333,6 +346,7 @@ class BandPowerAnalyzer:
         if self._anchor_index is None:
             self._anchor_index = block.block.first_sample_index
             self._anchor_us = block.block.first_sample_time_us
+            self._origin_index = block.block.first_sample_index
         self._history.append(block.block.data, block.block.first_sample_index)
         self._drain()
 
@@ -352,6 +366,7 @@ class BandPowerAnalyzer:
         self._rejected_windows = 0
         self._anchor_index = None
         self._anchor_us = 0
+        self._origin_index = None
         self._blinked_until = -1
         self._evidence = "warming"
 
@@ -359,12 +374,16 @@ class BandPowerAnalyzer:
         history = self._history
         if history is None or history.newest < 0:
             return
-        if history.newest + 1 < self._window_n:
+        origin = self._origin_index
+        if origin is None or history.newest < origin:
+            return
+        if history.newest - origin + 1 < self._window_n:
             self._evidence = "warming"
             return
-        end = self._window_n - 1 if self._last_end is None else self._last_end + self._step_n
+        first_end = origin + self._window_n - 1
+        end = first_end if self._last_end is None else self._last_end + self._step_n
         if history.newest - end > self._step_n * 8:
-            end = history.newest - (history.newest - (self._window_n - 1)) % self._step_n
+            end = first_end + ((history.newest - first_end) // self._step_n) * self._step_n
         while end <= history.newest:
             self._evaluate(end)
             self._last_end = end
@@ -391,7 +410,8 @@ class BandPowerAnalyzer:
             self._rejected_windows += 1
         if self._health_ok:
             self._maybe_blink(stream, end_index, window)
-        if self._baseline is None and end_index < self._baseline_n:
+        origin = 0 if self._origin_index is None else self._origin_index
+        if self._baseline is None and end_index - origin < self._baseline_n:
             for key, (power, _, _) in powers.items():
                 self._collect.setdefault(key, []).append(power)
             self._evidence = "baseline-unlocked" if any_good else "insufficient"
@@ -407,6 +427,7 @@ class BandPowerAnalyzer:
             return
         confirmed: dict[tuple[str, int], list[ChannelMeasurement]] = {}
         labels = stream.descriptor.channels
+        refreshed: set[tuple[int, str]] = set()
         for key, (power, rms, fraction) in powers.items():
             baseline = None if self._baseline is None else self._baseline.get(key)
             if baseline is None or baseline <= 1e-6 or power <= 0:
@@ -419,6 +440,7 @@ class BandPowerAnalyzer:
             sign = 1 if change > 0 else -1
             previous = self._hits.get(key)
             self._hits[key] = _Hit(sign, end_index)
+            refreshed.add(key)
             if previous is None or previous.sign != sign or previous.end_index >= end_index:
                 continue
             channel, band = key
@@ -437,6 +459,9 @@ class BandPowerAnalyzer:
                     quality="good",
                 )
             )
+        for key in list(self._hits):
+            if key not in refreshed:
+                self._hits.pop(key, None)
         self._evidence = "ready"
         for (band, _sign), channels in confirmed.items():
             previous_end = self._last_narrated.get(band, -(10**9))
@@ -469,13 +494,7 @@ class BandPowerAnalyzer:
             created_us=self._time_us(end_index),
         )
         self.store.add(finding)
-        names = ", ".join(channel.label for channel in channels)
-        lead = f"{names} {band} power changed"
-        detail = ", ".join(f"{channel.label} {channel.change_db:+.1f} dB" for channel in channels)
-        sentence = f"{lead}: {detail}, over samples {start}–{end_index}."
-        if synthetic:
-            sentence += " Synthetic signal — generated, not measured from a person."
-        self.store.add_line(sentence)
+        self.store.add_line(finding_sentence(finding))
 
     def _time_us(self, index: int) -> int:
         if self._anchor_index is None:
@@ -492,7 +511,7 @@ class BandPowerAnalyzer:
         fp1 = recent[labels.index("Fp1")]
         fp2 = recent[labels.index("Fp2")]
         occipital_rows = [recent[labels.index(label)] for label in ("O1", "O2") if label in labels]
-        occipital = np.mean(occipital_rows, axis=0) if occipital_rows else None
+        occipital = louder_occipital(occipital_rows)
         verdict = blink_verdict(fp1, fp2, occipital, self._rate)
         if verdict != "blink" or end_index < self._blinked_until:
             return
@@ -546,3 +565,29 @@ class BandPowerAnalyzer:
         if synthetic:
             sentence += " Synthetic signal — generated, not measured from a person."
         self.store.add_line(sentence)
+
+
+def finding_sentence(finding: Finding) -> str:
+    """Template narration. The model does not write this sentence."""
+    names = ", ".join(channel.label for channel in finding.channels)
+    detail = ", ".join(f"{channel.label} {channel.change_db:+.1f} dB" for channel in finding.channels)
+    sentence = (
+        f"{names} {finding.band} power changed: {detail}, "
+        f"over samples {finding.first_sample_index}–{finding.last_sample_index}."
+    )
+    if any(channel.accepted_sample_fraction < 1.0 for channel in finding.channels):
+        sentence += " Missing samples were replaced by the window mean inside this estimate only."
+    if finding.synthetic:
+        sentence += " Synthetic signal — generated, not measured from a person."
+    return sentence
+
+
+def observe_acquisition_health(service: AcquisitionService, analyzer: BandPowerAnalyzer) -> None:
+    """Close the analyzer's health gate from the acquisition service's own reasons."""
+
+    def listener(stream: ActiveStream, block: StreamBlock) -> None:
+        reasons = service.health().reasons
+        analyzer.set_health_ok("no-recent-data" not in reasons and "not-streaming" not in reasons)
+        analyzer.on_accepted(stream, block)
+
+    service.add_accepted_listener(listener)

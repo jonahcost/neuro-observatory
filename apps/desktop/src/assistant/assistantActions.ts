@@ -28,7 +28,11 @@ export function evidenceSelection(snapshot: AssistantSnapshot, finding: Finding)
       first: finding.firstSampleIndex,
       last: finding.lastSampleIndex,
     },
-    seek: snapshot.source === 'replay' && snapshot.recordingId !== null,
+    seek:
+      snapshot.source === 'replay' &&
+      snapshot.recordingId !== null &&
+      finding.recordingId === snapshot.recordingId &&
+      (finding.quality === 'good' || finding.quality === 'stale'),
   };
 }
 

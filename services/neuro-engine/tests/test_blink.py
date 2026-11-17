@@ -9,6 +9,7 @@ from neuro_engine.analysis.blink import (
     CLASSIFIER_ENABLED,
     blink_verdict,
     load_classifier,
+    louder_occipital,
 )
 from neuro_engine.recordings.scenario import alpha_step_descriptor, alpha_step_samples
 
@@ -33,6 +34,12 @@ def test_blink_heuristic_positive_negative_and_too_long() -> None:
     assert blink_verdict(long_a, long_b, quiet, rate) == "too-long"
     occipital = np.full(count, 200.0)
     assert blink_verdict(fp1, fp2, occipital, rate) == "none"
+    opposite = np.zeros(count)
+    opposite[10:35] = -400
+    small = np.full(count, 20.0)
+    louder = louder_occipital([small, opposite])
+    assert louder is opposite
+    assert blink_verdict(fp1, fp2, louder, rate) == "none"
 
 
 def test_analyzer_emits_one_blink_finding_for_a_frontal_burst() -> None:

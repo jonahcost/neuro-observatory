@@ -75,6 +75,8 @@ describe('assistant view actions', () => {
     expect(live.channels).toEqual(['O2', 'O1']);
     expect(live.seek).toBe(false);
     expect(evidenceSelection(snapshot('replay'), finding()).seek).toBe(true);
+    expect(evidenceSelection(snapshot('replay'), { ...finding(), recordingId: 'other-file' }).seek).toBe(false);
+    expect(evidenceSelection(snapshot('replay'), { ...finding(), quality: 'stale' }).seek).toBe(true);
   });
 
   it('maps a display-mode result onto the existing mode ids', () => {

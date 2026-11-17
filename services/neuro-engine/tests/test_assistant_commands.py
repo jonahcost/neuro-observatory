@@ -6,7 +6,12 @@ from pathlib import Path
 from neuro_engine.acquisition.clock import VirtualClock
 from neuro_engine.acquisition.service import AcquisitionService
 from neuro_engine.acquisition.synthetic import SyntheticEegAdapter
-from neuro_engine.analysis.band_power import BandPowerAnalyzer, FindingStore
+from neuro_engine.analysis.band_power import (
+    BandPowerAnalyzer,
+    ChannelMeasurement,
+    Finding,
+    FindingStore,
+)
 from neuro_engine.assistant.commands import execute, parse_text
 from neuro_engine.assistant.runtime import LlamaRuntime
 from neuro_engine.assistant.service import AssistantService
@@ -23,8 +28,8 @@ def _session(tmp_path: Path) -> tuple[SessionController, FindingStore, Assistant
     store = FindingStore()
     analyzer = BandPowerAnalyzer(store)
     service.add_accepted_listener(analyzer.on_accepted)
-    session = SessionController(service, settings, clock, tmp_path / "recordings", analyzer)
     model = LlamaRuntime(tmp_path, enabled=False)
+    session = SessionController(service, settings, clock, tmp_path / "recordings", analyzer, on_cancel=model.cancel)
     return session, store, AssistantService(session, store, model)
 
 
@@ -130,15 +135,71 @@ def test_model_transport_is_dropped_when_the_session_changes(tmp_path: Path) -> 
     async def run() -> dict:
         await session.service.start()
         task = asyncio.create_task(assistant.intent({"text": "What happened in the frontal channels?", "sessionGeneration": 0}))
-        await asyncio.sleep(0)
+        for _ in range(20):
+            await asyncio.sleep(0)
+            if assistant.model._inflight is not None:
+                break
         await session.use_synthetic()
-        task.cancel()
-        try:
-            result = await task
-        except asyncio.CancelledError:
-            result = {"intent": "cancelled", "message": "Cancelled because the session changed."}
+        result = await asyncio.wait_for(task, timeout=1)
         await session.service.stop()
         return result
 
     result = asyncio.run(run())
     assert result["intent"] == "cancelled" or "Cancelled" in str(result.get("message"))
+
+
+def test_model_prose_is_replaced_by_the_stored_measurement(tmp_path: Path) -> None:
+    session, store, assistant = _session(tmp_path)
+    finding = Finding(
+        finding_id="finding-alpha",
+        session_generation=0,
+        stream_id="stream-a",
+        recording_id=None,
+        source_kind="synthetic",
+        device_id="synthetic-0",
+        method="band-power",
+        method_version="1",
+        band="alpha",
+        first_sample_index=10,
+        last_sample_index=20,
+        first_sample_time_us=0,
+        last_sample_time_us=80_000,
+        nominal_sample_rate_hz=125.0,
+        channels=(
+            ChannelMeasurement(
+                index=13,
+                label="O1",
+                reference="synthetic",
+                unit="uV",
+                power_uv2=1800.0,
+                baseline_uv2=200.0,
+                change_db=9.5,
+                rms_uv=30.0,
+                accepted_sample_fraction=1.0,
+                quality="good",
+            ),
+        ),
+        quality="good",
+        synthetic=True,
+        created_us=80_000,
+    )
+    store.add(finding)
+
+    async def run() -> dict:
+        await session.service.start()
+        result = await assistant.intent(
+            {
+                "intent": "answer",
+                "answer": "O1 changed by 1000 dB.",
+                "findingIds": ["finding-alpha"],
+                "sessionGeneration": session.generation,
+            }
+        )
+        await session.service.stop()
+        return result
+
+    result = asyncio.run(run())
+    assert result["ok"] is True
+    assert "1000" not in result["message"]
+    assert "+9.5 dB" in result["message"]
+    assert "generated, not measured" in result["message"]

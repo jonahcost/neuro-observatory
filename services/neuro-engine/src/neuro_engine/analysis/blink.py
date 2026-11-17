@@ -23,6 +23,17 @@ def load_classifier(_path: Path | None = None) -> None:
     return
 
 
+def louder_occipital(rows: list[np.ndarray]) -> np.ndarray | None:
+    """The occipital channel with the larger energy.
+
+    Averaging O1 and O2 cancels opposite polarity and hides a large occipital
+    burst. The blink gate has to see the louder channel.
+    """
+    if not rows:
+        return None
+    return max(rows, key=lambda row: float(np.dot(row, row)))
+
+
 def blink_verdict(
     fp1: np.ndarray,
     fp2: np.ndarray,
