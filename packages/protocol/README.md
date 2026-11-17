@@ -76,3 +76,17 @@ Decision record: [ADR-0010](../../docs/architecture/decisions/ADR-0010-reference
 - `anatomyKind` is `template`, `reference-subject` or `personal`; `acquisition.source` states where the field strength and sequence come from (`sidecar`, `dataset-readme`, `site-documentation`, `user-declared`, `not-applicable`).
 - `provenance.sources[].path` is relative to the engine data root, has no empty/`.`/`..` segments and is never absolute. Manifests carry no MRI voxels and no participant demographics.
 - Semantic checks beyond the schema: real UTC calendar seconds; acquisition source/kind consistency; unique hemisphere/surface and hemisphere/atlas pairs; all surfaces of one hemisphere have the same vertex count; dtype and byte lengths consistent with counts; no buffer file referenced twice; finite, ordered bounds that match decoded extrema; parcellations match their hemisphere's vertex count and use int32 label indices; transforms are unique, finite and invertible and start at the asset frame; catalog asset IDs are unique and the default is listed. The producer separately verifies identical face topology across corresponding surfaces.
+
+## Assistant contract v1
+
+Decision records: [ADR-0016](../../docs/architecture/decisions/ADR-0016-live-eeg-replay-and-findings.md) and [ADR-0017](../../docs/architecture/decisions/ADR-0017-local-llama-assistant.md) (both proposed). Served by the engine under `/api/assistant/v1`. Independent of EEG v2 and anatomy v1.
+
+| Artifact | Role |
+| --- | --- |
+| `schemas/assistant.v1.schema.json` | Canonical schema for `assistant.snapshot` and `assistant.intent-result` (`schemaVersion: 1`) |
+| `src/generated/assistant.v1.ts` | Generated types |
+| `src/assistant.ts` | `parseAssistantDocument`, `parseAssistantSnapshot`, `parseIntentResult` |
+| `fixtures/assistant-v1/` | Shared valid and invalid documents |
+| `services/neuro-engine/src/neuro_engine/protocol/assistant_v1.py` | Pydantic mirror |
+
+A finding stores channel summaries (µV², dB, RMS, quality). It does not carry raw samples. The classifier field stays `disabled` until a later accepted decision enables one.

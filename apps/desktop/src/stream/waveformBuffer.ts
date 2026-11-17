@@ -103,6 +103,8 @@ export class WaveformBuffer {
   private slotsUntilRestartClears: number | null = null;
   private synthetic = false;
   private layoutEpoch = 0;
+  /** Sample index for each ring slot, or -1 for a gap or a previous clock domain. */
+  private sampleIndexes = new Int32Array(0);
   private chrome: WaveformChrome = EMPTY_CHROME;
   private readonly listeners = new Set<() => void>();
 
@@ -200,6 +202,21 @@ export class WaveformBuffer {
     return { ...this.chrome, values, length: this.count };
   }
 
+  /** True when this stream still has at least one stored sample inside the inclusive index range. */
+  coversSampleRange(streamId: string, first: number, last: number): boolean {
+    if (this.streamId !== streamId || this.count === 0 || this.capacity === 0 || first > last) {
+      return false;
+    }
+    const oldest = this.oldestIndex();
+    for (let i = 0; i < this.count; i += 1) {
+      const index = this.sampleIndexes[(oldest + i) % this.capacity];
+      if (index >= first && index <= last) {
+        return true;
+      }
+    }
+    return false;
+  }
+
   /** Finite runs for one channel, oldest to newest. A gap splits runs. */
   segments(channel: number): FiniteRun[] {
     const row = this.read().values[channel] ?? [];
@@ -225,7 +242,8 @@ export class WaveformBuffer {
     ctx: CanvasRenderingContext2D,
     width: number,
     height: number,
-    emphasis?: { index: number; color: string } | null,
+    emphasis?: { indexes: readonly number[]; primary: number; color: string } | null,
+    highlight?: { first: number; last: number } | null,
   ): void {
     if (this.error || this.channels.length === 0 || this.count === 0 || width <= 0 || height <= 0) {
       return;
@@ -244,9 +262,33 @@ export class WaveformBuffer {
       ctx.fillRect(0, laneTop + laneHeight / 2, width, 1);
     }
 
+    if (highlight && highlight.first <= highlight.last) {
+      let minX = Number.POSITIVE_INFINITY;
+      let maxX = Number.NEGATIVE_INFINITY;
+      for (let i = 0; i < this.count; i += 1) {
+        const index = this.sampleIndexes[(oldest + i) % this.capacity];
+        if (index < highlight.first || index > highlight.last) {
+          continue;
+        }
+        const slotFromLeft = this.capacity - this.count + i;
+        const x = ((slotFromLeft + 0.5) / this.capacity) * width;
+        minX = Math.min(minX, x);
+        maxX = Math.max(maxX, x);
+      }
+      if (minX <= maxX) {
+        const left = Math.max(0, minX - 2);
+        const right = Math.min(width, maxX + 2);
+        ctx.fillStyle = 'rgba(196, 181, 253, 0.16)';
+        ctx.fillRect(left, 0, Math.max(0, right - left), plotHeight);
+      }
+    }
+
+    const emphasized = new Set(emphasis?.indexes ?? []);
     for (let channel = 0; channel < this.channels.length; channel += 1) {
       const laneTop = channel * laneHeight;
-      ctx.strokeStyle = emphasis?.index === channel ? emphasis.color : TRACE_COLOR;
+      const primary = emphasis !== null && emphasis !== undefined && emphasis.primary === channel;
+      ctx.lineWidth = primary ? 1.8 : 1.25;
+      ctx.strokeStyle = primary ? emphasis.color : emphasized.has(channel) ? 'rgba(196, 181, 253, 0.72)' : TRACE_COLOR;
       const row = this.channels[channel];
       ctx.save();
       ctx.beginPath();
@@ -353,6 +395,8 @@ export class WaveformBuffer {
     this.rateHz = rate;
     this.capacity = capacity;
     this.channels = labels.map(() => new Float64Array(capacity));
+    this.sampleIndexes = new Int32Array(capacity);
+    this.sampleIndexes.fill(-1);
     this.write = 0;
     this.count = 0;
     this.streamId = null;
@@ -369,6 +413,7 @@ export class WaveformBuffer {
 
   private fail(message: string): void {
     this.channels = [];
+    this.sampleIndexes = new Int32Array(0);
     this.capacity = 0;
     this.write = 0;
     this.count = 0;
@@ -406,6 +451,7 @@ export class WaveformBuffer {
     const visibleNew = Math.min(block.sampleCount, this.capacity - visibleGap);
     const priorKeep = Math.min(this.count, this.capacity - visibleGap - visibleNew);
     this.count = priorKeep;
+    this.clearVisibleIndexes();
     if (visibleGap > 0) {
       this.pushEmpty(visibleGap);
     }
@@ -435,6 +481,7 @@ export class WaveformBuffer {
       for (const row of this.channels) {
         row[this.write] = Number.NaN;
       }
+      this.sampleIndexes[this.write] = -1;
       this.advance();
     }
   }
@@ -449,7 +496,18 @@ export class WaveformBuffer {
         const value = block.samples[channel]?.[sample];
         this.channels[channel][this.write] = typeof value === 'number' && Number.isFinite(value) ? value : Number.NaN;
       }
+      this.sampleIndexes[this.write] = block.firstSampleIndex + sample;
       this.advance();
+    }
+  }
+
+  private clearVisibleIndexes(): void {
+    if (this.capacity === 0 || this.count === 0) {
+      return;
+    }
+    const oldest = this.oldestIndex();
+    for (let i = 0; i < this.count; i += 1) {
+      this.sampleIndexes[(oldest + i) % this.capacity] = -1;
     }
   }
 

@@ -108,6 +108,7 @@ class AcquisitionService:
         self._reconnect = reconnect or ReconnectPolicy()
         self._new_stream_id = stream_id_factory or (lambda: uuid.uuid4().hex)
         self._task: asyncio.Task[None] | None = None
+        self._listeners: list[Callable[[ActiveStream, StreamBlock], None]] = []
         self._state = AcquisitionState.IDLE
         self._error: AcquisitionErrorInfo | None = None
         self._stream: ActiveStream | None = None
@@ -172,6 +173,18 @@ class AcquisitionService:
             if self._last_rejected_at_us is not None and now_us - self._last_rejected_at_us <= window_us:
                 reasons.append("recent-rejections")
         return AcquisitionHealth(tuple(reasons))
+
+    def set_adapter_factory(self, adapter_factory: Callable[[], DeviceAdapter]) -> None:
+        """Replace the source. The service must be stopped first."""
+        if self._task is not None and not self._task.done():
+            raise RuntimeError("stop acquisition before replacing the adapter")
+        self._adapter_factory = adapter_factory
+        if self._state is not AcquisitionState.FAILED:
+            self._state = AcquisitionState.IDLE
+
+    def add_accepted_listener(self, listener: Callable[[ActiveStream, StreamBlock], None]) -> None:
+        """Called after a block is published. Exceptions are logged, not fatal."""
+        self._listeners.append(listener)
 
     async def start(self) -> None:
         if self._task is not None and not self._task.done():
@@ -265,14 +278,14 @@ class AcquisitionService:
             return
         dropped = block.first_sample_index - self._next_index
         for offset in range(0, block.sample_count, MAX_BLOCK_SAMPLES):
-            self._hub.publish(
-                StreamBlock(
-                    stream_id=stream.stream_id,
-                    block_sequence=self._next_sequence,
-                    dropped_samples_before=dropped if offset == 0 else 0,
-                    block=_block_part(block, offset, period_us),
-                )
+            published = StreamBlock(
+                stream_id=stream.stream_id,
+                block_sequence=self._next_sequence,
+                dropped_samples_before=dropped if offset == 0 else 0,
+                block=_block_part(block, offset, period_us),
             )
+            self._hub.publish(published)
+            self._notify(stream, published)
             self._next_sequence += 1
         now_us = self._clock.monotonic_us()
         if self._first_block_at_us is None:
@@ -285,6 +298,13 @@ class AcquisitionService:
         self._last_block_duration_us = block.sample_count * period_us
         self._session_delivered = True
         self._error = None
+
+    def _notify(self, stream: ActiveStream, block: StreamBlock) -> None:
+        for listener in tuple(self._listeners):
+            try:
+                listener(stream, block)
+            except Exception:
+                logger.exception("Accepted-block listener failed")
 
     def _reject(self, reason: str) -> None:
         self._rejected_blocks += 1

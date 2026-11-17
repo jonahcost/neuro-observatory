@@ -1,0 +1,49 @@
+{
+  "type": "assistant.snapshot",
+  "schemaVersion": 1,
+  "sessionGeneration": 1,
+  "streamId": "stream-a",
+  "source": "synthetic",
+  "recordingId": null,
+  "paused": false,
+  "evidence": "ready",
+  "model": "unavailable",
+  "classifier": "disabled",
+  "analysisSamplesExpired": 0,
+  "findings": [
+    {
+      "findingId": "finding-alpha",
+      "sessionGeneration": 1,
+      "streamId": "stream-a",
+      "recordingId": null,
+      "sourceKind": "synthetic",
+      "deviceId": "synthetic-0",
+      "method": "band-power",
+      "methodVersion": "1",
+      "band": "alpha",
+      "firstSampleIndex": 20,
+      "lastSampleIndex": 10,
+      "firstSampleTimeUs": 0,
+      "lastSampleTimeUs": 80000,
+      "nominalSampleRateHz": 125,
+      "channels": [
+        {
+          "index": 0,
+          "label": "O1",
+          "reference": "synthetic",
+          "unit": "uV",
+          "powerUv2": 1,
+          "baselineUv2": 1,
+          "changeDb": 0,
+          "rmsUv": 1,
+          "acceptedSampleFraction": 1,
+          "quality": "good"
+        }
+      ],
+      "quality": "good",
+      "synthetic": true
+    }
+  ],
+  "markers": [],
+  "lines": []
+}

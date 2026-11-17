@@ -49,6 +49,8 @@ export {
   vertexLabelsIssue,
   type AnatomyParseResult,
 } from './anatomy';
+export type { AssistantDocument, AssistantSnapshot, Finding, IntentResult, Marker } from './generated/assistant.v1';
+export { ASSISTANT_SCHEMA_VERSION, parseAssistantDocument, parseAssistantSnapshot, parseIntentResult, validateAssistantDocument } from './assistant';
 export {
   StreamIntegrityTracker,
   emptyIntegrityCounters,

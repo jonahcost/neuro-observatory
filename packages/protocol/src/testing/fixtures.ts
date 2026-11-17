@@ -4,6 +4,7 @@ import type { ParseErrorKind } from '../validate';
 
 export const FIXTURE_ROOT = resolve(import.meta.dirname, '../../fixtures/v2');
 export const ANATOMY_FIXTURE_ROOT = resolve(import.meta.dirname, '../../fixtures/anatomy-v1');
+export const ASSISTANT_FIXTURE_ROOT = resolve(import.meta.dirname, '../../fixtures/assistant-v1');
 
 export interface ManifestCase {
   file: string;

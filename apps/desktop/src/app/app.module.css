@@ -48,7 +48,7 @@
 
 .workspace {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 300px;
+  grid-template-columns: auto minmax(0, 1fr) 300px;
   /* 32vh keeps the brain the larger row at the 800px and 700px checks.
      The 480px cap is the full plot; the plot itself stays 480px and scrolls. */
   grid-template-rows: minmax(320px, 1fr) minmax(220px, min(480px, 32vh));
@@ -56,8 +56,72 @@
   min-height: 0;
 }
 
-.viewport {
+.assistant {
   grid-column: 1;
+  grid-row: 1 / span 2;
+  width: 280px;
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: var(--surface-1);
+  padding: 12px 14px 16px;
+}
+
+.assistant[data-collapsed='true'] {
+  width: 44px;
+  padding: 12px 4px;
+  align-items: center;
+}
+
+.assistantTitle {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 650;
+}
+
+.assistantToggle {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  width: 100%;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-size: 16px;
+  font-weight: 650;
+  text-align: left;
+  cursor: pointer;
+}
+
+.assistant[data-collapsed='true'] .assistantTitle {
+  align-self: flex-start;
+}
+
+.assistant[data-collapsed='true'] .assistantToggle {
+  writing-mode: vertical-rl;
+  transform: rotate(180deg);
+  width: auto;
+  height: auto;
+  justify-content: flex-start;
+}
+
+.assistantBody {
+  min-height: 0;
+  overflow: auto;
+}
+
+.viewport {
+  grid-column: 2;
   grid-row: 1;
   min-width: 0;
   min-height: 0;
@@ -69,7 +133,7 @@
 }
 
 .inspector {
-  grid-column: 2;
+  grid-column: 3;
   grid-row: 1 / span 2;
   min-width: 0;
   min-height: 0;
@@ -81,7 +145,7 @@
 }
 
 .lower {
-  grid-column: 1;
+  grid-column: 2;
   grid-row: 2;
   min-width: 0;
   min-height: 0;

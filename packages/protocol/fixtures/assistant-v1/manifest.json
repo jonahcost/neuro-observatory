@@ -1,0 +1,45 @@
+{
+  "expectValues": ["json", "schema", "semantic", "unsupported-version", "valid"],
+  "cases": [
+    {
+      "file": "valid/snapshot-waiting.json",
+      "expect": "valid",
+      "description": "Empty snapshot while the analyzer is waiting for samples."
+    },
+    {
+      "file": "valid/snapshot-alpha-finding.json",
+      "expect": "valid",
+      "description": "Synthetic alpha finding with summaries and no raw samples."
+    },
+    {
+      "file": "valid/intent-emphasize.json",
+      "expect": "valid",
+      "description": "Emphasize result for the posterior channels."
+    },
+    {
+      "file": "invalid/not-json.txt",
+      "expect": "json",
+      "description": "Not JSON."
+    },
+    {
+      "file": "invalid/snapshot-version-2.json",
+      "expect": "unsupported-version",
+      "description": "A future schema version is refused."
+    },
+    {
+      "file": "invalid/snapshot-extra-field.json",
+      "expect": "schema",
+      "description": "Unknown fields are rejected."
+    },
+    {
+      "file": "invalid/snapshot-raw-samples.json",
+      "expect": "schema",
+      "description": "A finding must not carry a sample array."
+    },
+    {
+      "file": "invalid/snapshot-inverted-range.json",
+      "expect": "semantic",
+      "description": "The last sample index cannot precede the first."
+    }
+  ]
+}

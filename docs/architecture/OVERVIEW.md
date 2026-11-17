@@ -32,7 +32,7 @@ SyntheticEegAdapter (DeviceAdapter)          engine process, started by FastAPI 
   -> WaveformView         canvas lanes at display refresh; empty slots break the stroke (ADR-0012, ADR-0013)
 ```
 
-Acquisition runs whether or not any client is connected. Recording, replay, and DSP are not implemented yet; their seams are the lossless `StreamHub` subscription and the `DeviceAdapter` protocol. The live waveform is the desktop ring buffer on `EegStreamClient.onBlock` ([ADR-0012](decisions/ADR-0012-live-eeg-waveform-viewer.md), clarified by [ADR-0013](decisions/ADR-0013-waveform-viewer-review-remediation.md)). The wire contract is documented in [`packages/protocol/README.md`](../../packages/protocol/README.md).
+Acquisition runs whether or not any client is connected. A `recording.v1` replay adapter and a scalp band-power analyzer share that acquisition path ([ADR-0016](decisions/ADR-0016-live-eeg-replay-and-findings.md), proposed). The live waveform is the desktop ring buffer on `EegStreamClient.onBlock` ([ADR-0012](decisions/ADR-0012-live-eeg-waveform-viewer.md), clarified by [ADR-0013](decisions/ADR-0013-waveform-viewer-review-remediation.md)). The wire contract is documented in [`packages/protocol/README.md`](../../packages/protocol/README.md).
 
 ## Implemented anatomy path (Milestone 02A, ADR-0010)
 
@@ -44,7 +44,7 @@ neuro-engine anatomy prepare <subject>     FreeSurfer surfaces -> anatomy-asset 
   -> AnatomyViewer                         desktop; verifies buffers, renders both hemispheres, labels anatomy kind
 ```
 
-The anatomy path is offline batch code plus a read-only API; acquisition never imports it. The viewer shows anatomy only: no EEG channel is mapped to the cortex and no source estimate exists. Details, coordinate frames and the remaining steps toward source estimation are in [ANATOMY.md](ANATOMY.md).
+The anatomy path is offline batch code plus a read-only API; acquisition never imports it. The viewer shows anatomy plus template electrode positions. Band-power findings are scalp channel measurements, not a cortical image, and no source estimate exists. Details, coordinate frames and the remaining steps toward source estimation are in [ANATOMY.md](ANATOMY.md).
 
 ## Non-functional requirements
 

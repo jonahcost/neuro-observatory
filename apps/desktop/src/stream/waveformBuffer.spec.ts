@@ -353,4 +353,18 @@ describe('WaveformBuffer', () => {
     expect(buffer.read().clockRestarted).toBe(false);
     expect(buffer.read().restartCause).toBeNull();
   });
+
+  it('matches a sample-index range only while those indexes remain on this stream', () => {
+    const buffer = new WaveformBuffer();
+    const meta = metadata({}, ['Fp1']);
+    buffer.append(block(meta, 10, [[1, 2, 3]]), meta, 0);
+    expect(buffer.coversSampleRange('stream-a', 11, 11)).toBe(true);
+    expect(buffer.coversSampleRange('stream-a', 0, 9)).toBe(false);
+    expect(buffer.coversSampleRange('other', 11, 11)).toBe(false);
+
+    const restarted = metadata({ streamId: 'stream-b' }, ['Fp1']);
+    buffer.append(block(restarted, 11, [[4]], { firstSampleTimeUs: 0 }), restarted, 0);
+    expect(buffer.coversSampleRange('stream-a', 10, 12)).toBe(false);
+    expect(buffer.coversSampleRange('stream-b', 11, 11)).toBe(true);
+  });
 });

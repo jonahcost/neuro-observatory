@@ -337,20 +337,23 @@ export function ElectrodeMarkers({
   activity,
   visible,
   selectedLabelRef,
+  emphasizedLabelsRef,
 }: {
   electrodes: readonly PlacedElectrode[];
   activity: ChannelActivity;
   visible: boolean;
   selectedLabelRef: RefObject<string | null>;
+  emphasizedLabelsRef?: RefObject<readonly string[]>;
 }) {
   const materials = useRef(new Map<string, MeshBasicMaterial>());
   const labelNodes = useRef(new Map<string, HTMLSpanElement>());
   useFrame(() => {
     const display = activity.sampleDisplay(performance.now());
     const selected = selectedLabelRef.current;
+    const emphasized = emphasizedLabelsRef?.current ?? [];
     for (const electrode of electrodes) {
       const intensity = display.byLabel.get(electrode.label)?.intensity ?? 0;
-      const color = markerColor(electrode.label, selected);
+      const color = markerColor(electrode.label, selected, emphasized);
       const material = materials.current.get(electrode.label);
       if (material) {
         material.opacity = 0.18 + 0.82 * intensity;
@@ -360,7 +363,7 @@ export function ElectrodeMarkers({
       if (label) {
         label.style.opacity = String(0.45 + 0.55 * intensity);
         label.style.color = color;
-        label.style.fontWeight = electrode.label === selected ? '700' : '400';
+        label.style.fontWeight = electrode.label === selected ? '700' : emphasized.includes(electrode.label) ? '600' : '400';
       }
     }
   });
@@ -446,6 +449,7 @@ export function BrainShell({
   innerSurfaces,
   parcellations,
   selectedLabelRef,
+  emphasizedLabelsRef,
   showActivity,
 }: {
   surfaces: readonly LoadedSurface[];
@@ -457,6 +461,7 @@ export function BrainShell({
   innerSurfaces: readonly LoadedSurface[] | null;
   parcellations: readonly LoadedParcellation[] | null;
   selectedLabelRef: RefObject<string | null>;
+  emphasizedLabelsRef?: RefObject<readonly string[]>;
   showActivity: boolean;
 }) {
   const kind = surfaces[0]?.surface ?? 'pial';
@@ -501,6 +506,7 @@ export function BrainShell({
         activity={activity}
         visible={showActivity && kind !== 'inflated'}
         selectedLabelRef={selectedLabelRef}
+        emphasizedLabelsRef={emphasizedLabelsRef}
       />
       <PathwayLayer activity={activity} electrodes={electrodes} visible={showPathway} />
       {wire

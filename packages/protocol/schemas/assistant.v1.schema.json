@@ -1,0 +1,131 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://neuro-observatory.invalid/protocol/assistant.v1.schema.json",
+  "title": "AssistantDocument",
+  "description": "Neuro Observatory assistant contract v1. Findings and commands are separate from EEG stream v2. A finding stores summaries, not raw samples (ADR-0016).",
+  "oneOf": [
+    { "$ref": "#/$defs/AssistantSnapshot" },
+    { "$ref": "#/$defs/IntentResult" }
+  ],
+  "$defs": {
+    "SchemaVersion": { "const": 1 },
+    "Counter": { "type": "integer", "minimum": 0, "maximum": 9007199254740991 },
+    "Signed": { "type": "number" },
+    "ShortText": { "type": "string", "minLength": 1, "maxLength": 128 },
+    "Line": { "type": "string", "minLength": 1, "maxLength": 400 },
+    "Id": { "type": "string", "minLength": 1, "maxLength": 128 },
+    "ChannelMeasurement": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["index", "label", "reference", "unit", "powerUv2", "baselineUv2", "changeDb", "rmsUv", "acceptedSampleFraction", "quality"],
+      "properties": {
+        "index": { "$ref": "#/$defs/Counter" },
+        "label": { "$ref": "#/$defs/ShortText" },
+        "reference": { "$ref": "#/$defs/ShortText" },
+        "unit": { "const": "uV" },
+        "powerUv2": { "$ref": "#/$defs/Signed" },
+        "baselineUv2": { "$ref": "#/$defs/Signed" },
+        "changeDb": { "$ref": "#/$defs/Signed" },
+        "rmsUv": { "$ref": "#/$defs/Signed" },
+        "acceptedSampleFraction": { "type": "number", "minimum": 0, "maximum": 1 },
+        "quality": { "enum": ["good", "insufficient", "stale"] }
+      }
+    },
+    "Finding": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "findingId", "sessionGeneration", "streamId", "recordingId", "sourceKind", "deviceId",
+        "method", "methodVersion", "band", "firstSampleIndex", "lastSampleIndex",
+        "firstSampleTimeUs", "lastSampleTimeUs", "nominalSampleRateHz", "channels", "quality", "synthetic"
+      ],
+      "properties": {
+        "findingId": { "$ref": "#/$defs/Id" },
+        "sessionGeneration": { "$ref": "#/$defs/Counter" },
+        "streamId": { "$ref": "#/$defs/Id" },
+        "recordingId": { "type": ["string", "null"], "minLength": 1, "maxLength": 128 },
+        "sourceKind": { "enum": ["synthetic", "device"] },
+        "deviceId": { "$ref": "#/$defs/ShortText" },
+        "method": { "enum": ["band-power", "blink-heuristic"] },
+        "methodVersion": { "const": "1" },
+        "band": { "enum": ["theta", "alpha", "beta", "none"] },
+        "firstSampleIndex": { "$ref": "#/$defs/Counter" },
+        "lastSampleIndex": { "$ref": "#/$defs/Counter" },
+        "firstSampleTimeUs": { "$ref": "#/$defs/Counter" },
+        "lastSampleTimeUs": { "$ref": "#/$defs/Counter" },
+        "nominalSampleRateHz": { "type": "number", "exclusiveMinimum": 0 },
+        "channels": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 64,
+          "items": { "$ref": "#/$defs/ChannelMeasurement" }
+        },
+        "quality": { "enum": ["good", "insufficient", "stale"] },
+        "synthetic": { "type": "boolean" }
+      }
+    },
+    "Marker": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["markerId", "sessionGeneration", "streamId", "sampleIndex", "label"],
+      "properties": {
+        "markerId": { "$ref": "#/$defs/Id" },
+        "sessionGeneration": { "$ref": "#/$defs/Counter" },
+        "streamId": { "$ref": "#/$defs/Id" },
+        "sampleIndex": { "$ref": "#/$defs/Counter" },
+        "label": { "$ref": "#/$defs/ShortText" }
+      }
+    },
+    "AssistantSnapshot": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "type", "schemaVersion", "sessionGeneration", "streamId", "source", "recordingId", "paused",
+        "evidence", "model", "classifier", "analysisSamplesExpired", "findings", "markers", "lines"
+      ],
+      "properties": {
+        "type": { "const": "assistant.snapshot" },
+        "schemaVersion": { "$ref": "#/$defs/SchemaVersion" },
+        "sessionGeneration": { "$ref": "#/$defs/Counter" },
+        "streamId": { "type": ["string", "null"] },
+        "source": { "enum": ["synthetic", "replay"] },
+        "recordingId": { "type": ["string", "null"] },
+        "paused": { "type": "boolean" },
+        "evidence": { "enum": ["waiting", "warming", "baseline-unlocked", "ready", "insufficient", "stale"] },
+        "model": { "enum": ["unavailable", "ready", "starting"] },
+        "classifier": { "const": "disabled" },
+        "analysisSamplesExpired": { "$ref": "#/$defs/Counter" },
+        "findings": { "type": "array", "maxItems": 200, "items": { "$ref": "#/$defs/Finding" } },
+        "markers": { "type": "array", "maxItems": 100, "items": { "$ref": "#/$defs/Marker" } },
+        "lines": { "type": "array", "maxItems": 20, "items": { "$ref": "#/$defs/Line" } }
+      }
+    },
+    "IntentResult": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "type", "schemaVersion", "ok", "intent", "message", "channels", "primaryChannel",
+        "findingIds", "displayMode", "seekSampleIndex", "sessionGeneration", "streamId"
+      ],
+      "properties": {
+        "type": { "const": "assistant.intent-result" },
+        "schemaVersion": { "$ref": "#/$defs/SchemaVersion" },
+        "ok": { "type": "boolean" },
+        "intent": {
+          "enum": [
+            "emphasize_channels", "seek_to_finding", "add_marker", "lock_baseline",
+            "set_display_mode", "answer", "clarify", "cancelled"
+          ]
+        },
+        "message": { "$ref": "#/$defs/Line" },
+        "channels": { "type": "array", "maxItems": 64, "items": { "$ref": "#/$defs/ShortText" } },
+        "primaryChannel": { "type": ["string", "null"] },
+        "findingIds": { "type": "array", "maxItems": 8, "items": { "$ref": "#/$defs/Id" } },
+        "displayMode": { "enum": ["pial", "white", "inflated", "holographic", "grid", null] },
+        "seekSampleIndex": { "type": ["integer", "null"], "minimum": 0 },
+        "sessionGeneration": { "$ref": "#/$defs/Counter" },
+        "streamId": { "type": ["string", "null"] }
+      }
+    }
+  }
+}
