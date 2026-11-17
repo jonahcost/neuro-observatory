@@ -74,3 +74,5 @@ Validation:
 - full Nx lint/test/typecheck/build, generated-contract check, engine pytest/ruff, governance checks and `git diff --check`.
 
 Rollback is a unit revert of this remediation. Existing ADR-0010 assets remain regenerable from verified sources. If strict NIfTI handling blocks a legitimate file, the supported fallback is the explicit, provenance-recorded millimetre assumption—not silent guessing.
+
+Post-acceptance correction: UTC calendar validation compares date fields directly. It does not use a `strftime` round trip, because Linux does not zero-pad years 1–999 and that rejected the shared year-0001 fixture in GitHub CI.

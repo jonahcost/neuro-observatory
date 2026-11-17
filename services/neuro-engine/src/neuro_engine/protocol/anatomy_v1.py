@@ -205,11 +205,35 @@ def _finite(values: list[float]) -> bool:
 
 
 def _valid_utc_second(value: str) -> bool:
+    """Accept one real proleptic-Gregorian UTC second.
+
+    Calendar fields are compared directly. A ``strftime("%Y")`` round trip is not
+    portable: Linux emits years 1–999 without four-digit padding, so ``0001-01-01``
+    would fail in CI after passing on macOS.
+    """
+    if (
+        len(value) != 20
+        or value[4] != "-"
+        or value[7] != "-"
+        or value[10] != "T"
+        or value[13] != ":"
+        or value[16] != ":"
+        or value[19] != "Z"
+    ):
+        return False
     try:
-        parsed = datetime.strptime(value, "%Y-%m-%dT%H:%M:%SZ")
+        parts = (
+            int(value[0:4]),
+            int(value[5:7]),
+            int(value[8:10]),
+            int(value[11:13]),
+            int(value[14:16]),
+            int(value[17:19]),
+        )
+        parsed = datetime(*parts)
     except ValueError:
         return False
-    return parsed.strftime("%Y-%m-%dT%H:%M:%SZ") == value
+    return (parsed.year, parsed.month, parsed.day, parsed.hour, parsed.minute, parsed.second) == parts
 
 
 def _safe_relative_path(value: str) -> bool:

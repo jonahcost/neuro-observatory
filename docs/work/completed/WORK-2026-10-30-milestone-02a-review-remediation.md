@@ -64,6 +64,8 @@ Post-change evidence (final runs on 2026-10-30):
 - `git diff --check main` — exit 0.
 - `git status --short` and `git diff --name-only main` — reviewed; no restricted data files are present. The branch remains intentionally uncommitted after this remediation.
 
+CI correction (2026-11-17): GitHub `verify` failed on Ubuntu because Python's `strftime("%Y")` round trip rendered year 0001 as `1`, rejecting the shared valid fixture `0001-01-01T00:00:00Z`. Calendar validation now compares parsed fields directly. Local focused pytest covers that fixture; the GitHub run itself has not been rerun from this workspace.
+
 ## Risks and Follow-ups
 
 Stricter v1 validation can reject previously tolerated malformed documents. Existing assets require regeneration after the pipeline/identity version change. Reconstruction provenance records a human QC declaration but does not automate or certify QC. The MRI check cannot infer T1 contrast from voxel values; modality remains declared provenance. Full real-data verification remains skipped until an already authorized public-dataset root is explicitly configured. The desktop production bundle remains above Vite's 500 kB advisory threshold.
