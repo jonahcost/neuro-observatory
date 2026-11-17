@@ -2,7 +2,7 @@
 
 **Status:** Implemented in Milestone 02A ([ADR-0010](decisions/ADR-0010-reference-anatomy-foundation.md)). Source localization is **not** implemented; see [What EEG source estimation still needs](#what-eeg-source-estimation-still-needs).
 
-The viewer shows FreeSurfer cortical surfaces of a template (fsaverage), a public reference subject (OpenNeuro ds000248 `sub-01`) or, later, the owner's own reconstruction. It shows anatomy only. Nothing about the EEG stream is drawn on the cortex.
+The viewer shows FreeSurfer cortical surfaces of a template (fsaverage), a public reference subject (OpenNeuro ds000248 `sub-01`) or, later, the owner's own reconstruction. Milestone 03B ([ADR-0014](decisions/ADR-0014-brain-wireframe-activity.md)) adds sensor-space electrode highlights from the one-second RMS of the live EEG stream. Those marks are template display positions, not a source estimate, and they are not painted onto cortical vertices.
 
 ## Layers
 
@@ -17,7 +17,7 @@ assets/anatomy/<assetId>/           manifest.json + little-endian buffers; regen
         |
         |  GET /api/anatomy/v1/...  (engine, 127.0.0.1, GET only, CORS allowlist)
         v
-desktop: anatomyClient (validate + sha256) -> useAnatomy -> AnatomyViewer -> CorticalSurfaceView (Three.js)
+desktop: anatomyClient (validate + sha256) -> useAnatomy -> AnatomyViewer -> BrainShell (Three.js)
 ```
 
 | Layer | Where | Leaves the engine? |
@@ -49,7 +49,7 @@ Acquisition (`neuro_engine.acquisition`) never imports `datasets` or `anatomy`. 
 
 ### Renderer mapping (display only)
 
-Three.js is y-up; RAS is z-up. `CorticalSurfaceView` rotates the scene group by −90° about x (`RAS_TO_SCENE_ROTATION`), i.e. `(x, y, z)_RAS → (x, z, −y)_scene`. Scene units are millimetres. Vertex buffers are uploaded unchanged.
+Three.js is y-up; RAS is z-up. `BrainShell` rotates the scene group by −90° about x (`RAS_TO_SCENE_ROTATION`), i.e. `(x, y, z)_RAS → (x, z, −y)_scene`. Scene units are millimetres. Vertex buffers are uploaded unchanged. Solid, Holographic, and Grid are display presets of that same surface. Holographic and Grid draw a clustered line mesh and leave the FreeSurfer buffers unchanged.
 
 FreeSurfer inflates each hemisphere around its own centre, so the two inflated surfaces overlap around x = 0 (verified on fsaverage and ds000248). For the **inflated** surface only, the viewer shifts each hemisphere along x so their medial extremes are `INFLATED_DISPLAY_GAP_MM` (8 mm) apart, and the provenance panel says so. Pial and white surfaces are drawn in place. Nothing is written back to data.
 
@@ -84,7 +84,7 @@ Personal FreeSurfer imports require a previously imported T1 and a versioned rec
 | `estimate` | Model-derived source estimate from measured EEG (method, recording, pipeline version) | "Model-derived source estimate from scalp EEG — not a direct measurement" |
 | `validated-estimate` | As above, for a pipeline that passed documented validation for this subject | "Validated model-derived source estimate — not a direct measurement" |
 
-`overlayIssue` rejects overlays for another asset or with the wrong vertex count. Nothing creates overlays today. The viewer states "No activity overlay. The EEG stream is not mapped onto this anatomy; no source estimate is shown." The 16 synthetic stream channels are never mapped to vertices or regions. Atlas colouring is labelled as anatomical labels, not activity. A wire contract for estimates needs its own ADR.
+`overlayIssue` rejects overlays for another asset or with the wrong vertex count. Nothing creates overlays today. The viewer does draw sensor-space highlights: the one-second RMS of accepted EEG samples, in µV, on template 10-20 display positions, against a 30 µV display scale. Those positions are not registered electrodes, and the RMS is not mapped onto cortical vertices or atlas regions. Atlas colouring stays an anatomical label. A wire contract for source estimates needs its own ADR.
 
 ## What EEG source estimation still needs
 
