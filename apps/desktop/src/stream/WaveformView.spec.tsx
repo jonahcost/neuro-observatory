@@ -1,7 +1,6 @@
 import { act, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { emptyIntegrityCounters, type EegBlock, type StreamMetadata } from '@neuro-observatory/protocol';
-import type { EegStreamSnapshot } from './eegStreamClient';
+import type { EegBlock, StreamMetadata } from '@neuro-observatory/protocol';
 import { WaveformView } from './WaveformView';
 import { WaveformBuffer } from './waveformBuffer';
 
@@ -47,22 +46,6 @@ function block(meta: StreamMetadata, firstSampleIndex: number, samples: number[]
   };
 }
 
-function snapshot(overrides: Partial<EegStreamSnapshot> = {}): EegStreamSnapshot {
-  return {
-    connection: 'open',
-    health: 'live',
-    metadata: metadata(LABELS),
-    engineStatus: null,
-    lastBlock: null,
-    integrity: emptyIntegrityCounters(),
-    invalidMessages: 0,
-    lastProtocolError: null,
-    reconnectAttempt: 0,
-    listenerErrors: 0,
-    ...overrides,
-  };
-}
-
 describe('WaveformView', () => {
   afterEach(() => {
     vi.unstubAllGlobals();
@@ -71,7 +54,7 @@ describe('WaveformView', () => {
     Reflect.deleteProperty(HTMLCanvasElement.prototype, 'clientHeight');
   });
 
-  it('shows stream-order labels, synthetic provenance, and the connection state', () => {
+  it('shows stream-order labels and the window scale without repeating header status', () => {
     vi.stubGlobal('requestAnimationFrame', () => 1);
     vi.stubGlobal('cancelAnimationFrame', () => undefined);
     const buffer = new WaveformBuffer();
@@ -86,19 +69,15 @@ describe('WaveformView', () => {
       0,
     );
 
-    render(<WaveformView buffer={buffer} snapshot={snapshot()} />);
+    render(<WaveformView buffer={buffer} />);
 
     const region = screen.getByRole('region', { name: 'EEG waveforms' });
     const labels = [...region.querySelectorAll('li')].map((item) => item.textContent).filter((text) => text);
     expect(labels).toEqual(LABELS);
-    expect(region.textContent).toContain('Synthetic signal — generated, not measured from a person.');
-    expect(region.querySelector('details')?.textContent ?? '').not.toContain('not measured');
+    expect(region.textContent).not.toContain('Synthetic signal');
+    expect(region.textContent).not.toContain('Connected');
+    expect(region.textContent).not.toContain('Live');
     expect(region.textContent).toContain('±100 µV');
-    expect(screen.getByRole('status').textContent).toContain('Connected');
-    expect(screen.getByRole('status').textContent).toContain('Live');
-
-    render(<WaveformView buffer={buffer} snapshot={snapshot({ connection: 'reconnecting', reconnectAttempt: 2, health: 'waiting' })} />);
-    expect(screen.getAllByRole('status').some((node) => node.textContent?.includes('Disconnected — reconnecting (attempt 2)'))).toBe(true);
   });
 
   it('starts a new stroke after a gap instead of drawing across it', () => {
@@ -163,7 +142,7 @@ describe('WaveformView', () => {
     buffer.append(block(meta, 0, [[1, 1]]), meta, 0);
     buffer.append(block(meta, 3, [[2, 2]], { blockSequence: 1, droppedSamplesBefore: 1 }), meta, 24);
 
-    const { unmount } = render(<WaveformView buffer={buffer} snapshot={snapshot({ metadata: meta })} />);
+    const { unmount } = render(<WaveformView buffer={buffer} />);
     act(() => {
       pending?.(0);
     });
@@ -235,7 +214,7 @@ describe('WaveformView', () => {
     const restarted = metadata(['Fp1'], 'stream-b');
     buffer.append(block(restarted, 0, [[9]], { firstSampleTimeUs: 0 }), restarted, 0);
 
-    const { unmount } = render(<WaveformView buffer={buffer} snapshot={snapshot({ metadata: restarted })} />);
+    const { unmount } = render(<WaveformView buffer={buffer} />);
     const restartedRegion = screen.getByRole('region', { name: 'EEG waveforms' });
     expect(restartedRegion.textContent).toContain('Engine clock restarted (new stream).');
     expect(restartedRegion.querySelector('details')?.textContent ?? '').not.toContain('Engine clock restarted');
@@ -244,7 +223,7 @@ describe('WaveformView', () => {
     const clockBuffer = new WaveformBuffer();
     clockBuffer.append(block(same, 0, [[4]], { firstSampleTimeUs: 1_000_000 }), same, 0);
     clockBuffer.append(block(same, 1, [[9]], { blockSequence: 1, firstSampleTimeUs: 0 }), same, 1_000);
-    render(<WaveformView buffer={clockBuffer} snapshot={snapshot({ metadata: same })} />);
+    render(<WaveformView buffer={clockBuffer} />);
     const captions = screen.getAllByRole('region', { name: 'EEG waveforms' }).map((node) => node.textContent ?? '');
     expect(captions.some((text) => text.includes('Source clock moved backwards on this stream.'))).toBe(true);
     expect(captions.some((text) => text.includes('Source clock moved backwards') && text.includes('new stream'))).toBe(false);
@@ -253,7 +232,7 @@ describe('WaveformView', () => {
     ops.length = 0;
     const single = new WaveformBuffer();
     single.append(block(meta, 0, [[3]]), meta, 0);
-    render(<WaveformView buffer={single} snapshot={snapshot({ metadata: meta })} />);
+    render(<WaveformView buffer={single} />);
     act(() => {
       pending?.(0);
     });
@@ -275,10 +254,10 @@ describe('WaveformView', () => {
       0,
     );
     const onSelect = vi.fn();
-    const { rerender } = render(<WaveformView buffer={buffer} snapshot={snapshot()} onSelectChannel={onSelect} />);
+    const { rerender } = render(<WaveformView buffer={buffer} onSelectChannel={onSelect} />);
     fireEvent.click(screen.getByRole('button', { name: 'Cz' }));
     expect(onSelect).toHaveBeenCalledWith('Cz');
-    rerender(<WaveformView buffer={buffer} snapshot={snapshot()} selectedChannel="Cz" onSelectChannel={onSelect} />);
+    rerender(<WaveformView buffer={buffer} selectedChannel="Cz" onSelectChannel={onSelect} />);
     const selected = screen.getByRole('button', { name: 'Cz' });
     expect(selected.getAttribute('aria-pressed')).toBe('true');
     expect(selected.className).not.toBe('');
@@ -300,7 +279,7 @@ describe('WaveformView', () => {
       0,
     );
     const onSelect = vi.fn();
-    render(<WaveformView buffer={buffer} snapshot={snapshot()} selectedChannel="Cz" onSelectChannel={onSelect} />);
+    render(<WaveformView buffer={buffer} selectedChannel="Cz" onSelectChannel={onSelect} />);
     const next = metadata(LABELS, 'stream-b');
     next.channels = next.channels.map((channel) => ({ ...channel, reference: 'SRB2' }));
     act(() => {
@@ -333,7 +312,7 @@ describe('WaveformView', () => {
       0,
     );
     const onSelect = vi.fn();
-    render(<WaveformView buffer={buffer} snapshot={snapshot()} selectedChannel="Cz" onSelectChannel={onSelect} />);
+    render(<WaveformView buffer={buffer} selectedChannel="Cz" onSelectChannel={onSelect} />);
     const restarted = metadata(LABELS, 'stream-b');
     act(() => {
       buffer.append(

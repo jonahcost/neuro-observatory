@@ -94,6 +94,26 @@ describe('StreamStatusPanel', () => {
     render(<StreamStatusPanel snapshot={snapshot({ metadata: { ...metadata, provenance: { kind: 'device' } } })} />);
     expect(screen.getByTestId('provenance').textContent).toContain('Device measurement (scalp EEG)');
   });
+
+  it('labels file replay as playback rather than a live device', () => {
+    render(
+      <StreamStatusPanel
+        snapshot={snapshot({
+          metadata: {
+            ...metadata,
+            device: { ...metadata.device, kind: 'replay', model: 'edf-import' },
+            provenance: { kind: 'device' },
+            channels: [{ index: 0, label: 'Fp1', type: 'EEG', unit: 'uV', reference: 'unknown' }],
+            timebase: { ...metadata.timebase, timestampSource: 'host-receipt-fitted' },
+          },
+        })}
+      />,
+    );
+    const text = screen.getByTestId('provenance').textContent ?? '';
+    expect(text).toContain('Replay of a recorded file');
+    expect(text).toContain('reference unknown');
+    expect(text).not.toContain('Device measurement');
+  });
 });
 
 describe('engineUrlFromEnv', () => {

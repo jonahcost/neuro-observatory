@@ -366,12 +366,16 @@ export const AnatomyViewer = memo(function AnatomyViewer({
   client,
   activity,
   selectedChannel = null,
+  emphasizedChannels = [],
+  requestedDisplayMode = null,
   viewportClassName,
   inspectorClassName,
 }: {
   client: AnatomyClient;
   activity: ChannelActivity;
   selectedChannel?: string | null;
+  emphasizedChannels?: readonly string[];
+  requestedDisplayMode?: { nonce: number; mode: DisplayModeId } | null;
   viewportClassName?: string;
   inspectorClassName?: string;
 }) {
@@ -388,7 +392,10 @@ export const AnatomyViewer = memo(function AnatomyViewer({
   const orbitTarget = useRef<Vec3 | null>(null);
   const orbitPosition = useRef<Vec3 | null>(null);
   const selectedLabelRef = useRef<string | null>(selectedChannel);
+  const emphasizedLabelsRef = useRef<readonly string[]>(emphasizedChannels);
+  const appliedModeNonce = useRef(0);
   selectedLabelRef.current = selectedChannel;
+  emphasizedLabelsRef.current = emphasizedChannels;
   useEffect(() => {
     const update = () => setHighlight(activity.sampleDisplay(performance.now()));
     update();
@@ -458,6 +465,12 @@ export const AnatomyViewer = memo(function AnatomyViewer({
     view.selectSurface(selection.surfaceKind);
     setPreset(selection.preset);
   };
+  if (requestedDisplayMode && requestedDisplayMode.nonce !== appliedModeNonce.current) {
+    appliedModeNonce.current = requestedDisplayMode.nonce;
+    const selection = displayModeFor(requestedDisplayMode.mode);
+    view.selectSurface(selection.surfaceKind);
+    setPreset(selection.preset);
+  }
 
   return (
     <>
@@ -492,6 +505,7 @@ export const AnatomyViewer = memo(function AnatomyViewer({
                 innerSurfaces={shown.preset === 'holographic' && shown.surfaceKind === 'pial' ? companion.surfaces : null}
                 parcellations={shown.parcellations}
                 selectedLabelRef={selectedLabelRef}
+                emphasizedLabelsRef={emphasizedLabelsRef}
                 showActivity={showActivity}
               />
               <OrbitControls

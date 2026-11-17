@@ -17,6 +17,7 @@ from typing import Any
 from neuro_engine.anatomy.errors import AnatomyError
 from neuro_engine.datasets.errors import DatasetError
 from neuro_engine.datasets.storage import DataRoot, resolve_data_root
+from neuro_engine.recordings.v1 import RecordingError
 
 
 class _Output:
@@ -353,6 +354,51 @@ def _anatomy_verify(args: argparse.Namespace, root: DataRoot, out: _Output) -> i
     return 1 if problems else 0
 
 
+def _recordings_alpha_step(args: argparse.Namespace, root: DataRoot, out: _Output) -> int:
+    from neuro_engine.recordings.scenario import write_alpha_step
+
+    directory = root.path / "recordings" / "alpha-step"
+    recording, step = write_alpha_step(directory)
+    out.emit(
+        {"recordingId": recording.recording_id, "samples": recording.sample_count, "alphaStepIndex": step},
+        lambda: f"wrote {recording.recording_id}: {recording.sample_count} samples, alpha step at index {step}",
+    )
+    return 0
+
+
+def _recordings_import_edf(args: argparse.Namespace, root: DataRoot, out: _Output) -> int:
+    from neuro_engine.recordings.edf import import_edf
+
+    directory = root.path / "recordings" / args.recording_id
+    recording = import_edf(Path(args.file), directory, args.recording_id)
+    out.emit(
+        {"recordingId": recording.recording_id, "channels": recording.descriptor.channel_count, "samples": recording.sample_count},
+        lambda: (
+            f"imported {recording.recording_id}: {recording.descriptor.channel_count} channels, "
+            f"{recording.sample_count} samples, labels preserved"
+        ),
+    )
+    return 0
+
+
+def _assistant_install(args: argparse.Namespace, root: DataRoot, out: _Output) -> int:
+    from neuro_engine.assistant.runtime import LlamaRuntime
+
+    runtime = LlamaRuntime(root.path, port=args.port, enabled=False)
+    path = runtime.install(
+        Path(args.gguf),
+        args.sha256,
+        args.llama_server,
+        quantization=args.quantization,
+        context=args.context,
+    )
+    out.emit(
+        {"manifest": path.name, "gpuLayers": 0},
+        lambda: f"installed assistant manifest {path.name}; set NEURO_ENGINE_ASSISTANT=1 to start llama-server",
+    )
+    return 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="neuro-engine", description="Neuro Observatory engine tools.")
     parser.add_argument("--data-dir", help="data root (default: $NEURO_ENGINE_DATA_DIR or the per-user data directory)")
@@ -434,6 +480,24 @@ def build_parser() -> argparse.ArgumentParser:
     p = anatomy.add_parser("verify", help="re-verify one asset's buffers")
     p.add_argument("asset_id")
     p.set_defaults(handler=_anatomy_verify)
+
+    recordings = groups.add_parser("recordings", help="write local recording.v1 files").add_subparsers(dest="command", required=True)
+    p = recordings.add_parser("write-alpha-step", help="write the deterministic synthetic occipital alpha step")
+    p.set_defaults(handler=_recordings_alpha_step)
+    p = recordings.add_parser("import-edf", help="import an EDF file without renaming channels (needs MNE)")
+    p.add_argument("file")
+    p.add_argument("--recording-id", required=True)
+    p.set_defaults(handler=_recordings_import_edf)
+
+    assistant_cli = groups.add_parser("assistant", help="local model manifest").add_subparsers(dest="command", required=True)
+    p = assistant_cli.add_parser("install", help="checksum a local GGUF and write the manifest; does not download")
+    p.add_argument("--gguf", required=True)
+    p.add_argument("--sha256", required=True)
+    p.add_argument("--llama-server", required=True)
+    p.add_argument("--quantization", default="Q4_K_M")
+    p.add_argument("--context", type=int, default=2048)
+    p.add_argument("--port", type=int, default=8010)
+    p.set_defaults(handler=_assistant_install)
     return parser
 
 
@@ -443,7 +507,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     try:
         root = resolve_data_root(args.data_dir)
         return int(args.handler(args, root, out))
-    except (DatasetError, AnatomyError) as exc:
+    except (DatasetError, AnatomyError, RecordingError) as exc:
         hint = getattr(exc, "hint", None)
         if args.json:
             print(json.dumps({"error": {"code": exc.code, "message": exc.message, "hint": hint}}), file=sys.stderr)

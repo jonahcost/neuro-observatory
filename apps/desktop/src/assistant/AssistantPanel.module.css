@@ -1,0 +1,36 @@
+.panel {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.note {
+  margin: 0;
+  color: var(--muted, #a8b0bd);
+  font-size: 12px;
+}
+
+.reply {
+  margin: 0;
+  color: var(--text, #e7edf5);
+  font-size: 13px;
+}
+
+.form,
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+}
+
+.findings,
+.lines {
+  margin: 0;
+  padding-left: 18px;
+}
+
+.form input {
+  min-width: 0;
+  flex: 1 1 120px;
+}

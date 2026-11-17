@@ -1,7 +1,5 @@
 import { useEffect, useRef, useSyncExternalStore } from 'react';
 import { ACCENT_VIOLET } from '../theme';
-import type { EegStreamSnapshot } from './eegStreamClient';
-import { CONNECTION_LABELS, HEALTH_LABELS } from './StreamStatusPanel';
 import { LANE_HALF_RANGE_UV, TIME_AXIS_PX, WINDOW_SECONDS, type RestartCause, type WaveformBuffer } from './waveformBuffer';
 import styles from './WaveformView.module.css';
 
@@ -21,22 +19,28 @@ function restartNote(cause: RestartCause | null): string {
 
 export function WaveformView({
   buffer,
-  snapshot,
   selectedChannel = null,
+  emphasizedChannels,
+  highlightRange = null,
   onSelectChannel,
 }: {
   buffer: WaveformBuffer;
-  snapshot: EegStreamSnapshot;
   selectedChannel?: string | null;
+  emphasizedChannels?: readonly string[];
+  highlightRange?: { streamId: string; first: number; last: number } | null;
   onSelectChannel?: (label: string | null) => void;
 }) {
   const chrome = useSyncExternalStore(buffer.subscribe, buffer.getChrome);
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const emphasisRef = useRef<{ index: number; color: string } | null>(null);
+  const emphasisRef = useRef<{ indexes: number[]; primary: number; color: string } | null>(null);
+  const highlightRef = useRef(highlightRange);
   const layoutEpochRef = useRef(chrome.layoutEpoch);
   const labels = chrome.labels;
-  const selectedIndex = selectedChannel === null ? -1 : labels.indexOf(selectedChannel);
-  emphasisRef.current = selectedIndex < 0 ? null : { index: selectedIndex, color: ACCENT_VIOLET };
+  const names = emphasizedChannels && emphasizedChannels.length > 0 ? emphasizedChannels : selectedChannel ? [selectedChannel] : [];
+  const indexes = names.map((label) => labels.indexOf(label)).filter((index) => index >= 0);
+  const primary = selectedChannel === null ? (indexes[0] ?? -1) : labels.indexOf(selectedChannel);
+  emphasisRef.current = indexes.length === 0 || primary < 0 ? null : { indexes, primary, color: ACCENT_VIOLET };
+  highlightRef.current = highlightRange;
 
   useEffect(() => {
     const epochChanged = layoutEpochRef.current !== chrome.layoutEpoch;
@@ -74,7 +78,12 @@ export function WaveformView({
         if (context) {
           context.setTransform(dpr, 0, 0, dpr, 0, 0);
           context.clearRect(0, 0, cssWidth, cssHeight);
-          buffer.paint(context, cssWidth, cssHeight, emphasisRef.current);
+          const range = highlightRef.current;
+          const band =
+            range && buffer.coversSampleRange(range.streamId, range.first, range.last)
+              ? { first: range.first, last: range.last }
+              : null;
+          buffer.paint(context, cssWidth, cssHeight, emphasisRef.current, band);
         }
       }
       frame = requestAnimationFrame(draw);
@@ -88,7 +97,6 @@ export function WaveformView({
 
   const shownUnit = unitLabel(chrome.unit);
   const clockNote = restartNote(chrome.restartCause).trim();
-  const syntheticNote = chrome.synthetic ? 'Synthetic signal — generated, not measured from a person.' : '';
 
   return (
     <section id="signals" className={styles.figure} aria-label="EEG waveforms">
@@ -98,19 +106,7 @@ export function WaveformView({
           {WINDOW_SECONDS} s window · ±{LANE_HALF_RANGE_UV} {shownUnit}
         </p>
       </div>
-      <p role="status" aria-live="polite" className={styles.note}>
-        {CONNECTION_LABELS[snapshot.connection]}
-        {snapshot.connection === 'reconnecting' ? ` (attempt ${snapshot.reconnectAttempt})` : ''}
-        {' · '}
-        {HEALTH_LABELS[snapshot.health]}
-      </p>
-      {syntheticNote || clockNote ? (
-        <p className={styles.note}>
-          {syntheticNote}
-          {syntheticNote && clockNote ? ' ' : ''}
-          {clockNote}
-        </p>
-      ) : null}
+      {clockNote ? <p className={styles.note}>{clockNote}</p> : null}
       {labels.length === 0 ? <p className={styles.note}>Waiting for EEG samples.</p> : null}
       <details className={styles.notes}>
         <summary>Trace notes</summary>

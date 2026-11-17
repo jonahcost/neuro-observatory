@@ -62,6 +62,9 @@ class EngineSettings:
     reconnect: ReconnectPolicy = field(default_factory=ReconnectPolicy)
     # None selects NEURO_ENGINE_DATA_DIR or the per-user default (see neuro_engine.datasets.storage).
     data_dir: Path | None = None
+    # Off unless NEURO_ENGINE_ASSISTANT=1. Acquisition never waits on the model.
+    assistant_enabled: bool = False
+    assistant_port: int = 8010
 
     def __post_init__(self) -> None:
         if self.device != "synthetic":
@@ -70,6 +73,8 @@ class EngineSettings:
             raise SettingsError("live_view_queue_blocks must be in [1, 10000]")
         if not 0 < self.status_interval_s <= 60:
             raise SettingsError("status_interval_s must be in (0, 60]")
+        if not 1024 <= self.assistant_port <= 65535:
+            raise SettingsError("assistant_port must be in [1024, 65535]")
         for origin in self.allowed_origins:
             parsed = urlsplit(origin)
             if (
@@ -110,11 +115,16 @@ class EngineSettings:
             raise SettingsError(str(exc)) from None
         origins = get("ALLOWED_ORIGINS")
         data_dir = get("DATA_DIR")
+        assistant = (get("ASSISTANT") or "0").lower()
+        if assistant not in {"0", "1", "false", "true", "off", "on"}:
+            raise SettingsError(f"{ENV_PREFIX}ASSISTANT must be 0 or 1")
         return cls(
             data_dir=Path(data_dir).expanduser() if data_dir else None,
             device=get("DEVICE") or "synthetic",
             synthetic=synthetic,
             live_view_queue_blocks=get_int("LIVE_VIEW_QUEUE_BLOCKS", 25),
+            assistant_enabled=assistant in {"1", "true", "on"},
+            assistant_port=get_int("ASSISTANT_PORT", 8010),
             allowed_origins=(
                 frozenset(o.strip() for o in origins.split(",") if o.strip()) if origins else DEFAULT_ALLOWED_ORIGINS
             ),

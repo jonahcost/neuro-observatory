@@ -1,0 +1,16 @@
+{
+  "type": "assistant.snapshot",
+  "schemaVersion": 2,
+  "sessionGeneration": 1,
+  "streamId": null,
+  "source": "synthetic",
+  "recordingId": null,
+  "paused": false,
+  "evidence": "waiting",
+  "model": "unavailable",
+  "classifier": "disabled",
+  "analysisSamplesExpired": 0,
+  "findings": [],
+  "markers": [],
+  "lines": []
+}

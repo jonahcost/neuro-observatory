@@ -1,0 +1,61 @@
+{
+  "type": "assistant.snapshot",
+  "schemaVersion": 1,
+  "sessionGeneration": 2,
+  "streamId": "stream-replay",
+  "source": "replay",
+  "recordingId": "alpha-step",
+  "paused": false,
+  "evidence": "ready",
+  "model": "unavailable",
+  "classifier": "disabled",
+  "analysisSamplesExpired": 0,
+  "findings": [
+    {
+      "findingId": "finding-alpha",
+      "sessionGeneration": 2,
+      "streamId": "stream-replay",
+      "recordingId": "alpha-step",
+      "sourceKind": "synthetic",
+      "deviceId": "replay-alpha-step",
+      "method": "band-power",
+      "methodVersion": "1",
+      "band": "alpha",
+      "firstSampleIndex": 2500,
+      "lastSampleIndex": 2749,
+      "firstSampleTimeUs": 20000000,
+      "lastSampleTimeUs": 21992000,
+      "nominalSampleRateHz": 125,
+      "channels": [
+        {
+          "index": 13,
+          "label": "O1",
+          "reference": "synthetic",
+          "unit": "uV",
+          "powerUv2": 1800,
+          "baselineUv2": 200,
+          "changeDb": 9.5,
+          "rmsUv": 42,
+          "acceptedSampleFraction": 1,
+          "quality": "good"
+        },
+        {
+          "index": 14,
+          "label": "O2",
+          "reference": "synthetic",
+          "unit": "uV",
+          "powerUv2": 1800,
+          "baselineUv2": 200,
+          "changeDb": 9.5,
+          "rmsUv": 42,
+          "acceptedSampleFraction": 1,
+          "quality": "good"
+        }
+      ],
+      "quality": "good",
+      "synthetic": true
+    }
+  ],
+  "markers": [],
+  "lines": ["O1, O2 alpha power changed by +9.5 dB. This is a synthetic scalp measurement, not a cortical image."]
+}

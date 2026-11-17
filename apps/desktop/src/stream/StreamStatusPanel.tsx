@@ -27,6 +27,13 @@ function provenanceLabel(snapshot: EegStreamSnapshot): { short: string; full: st
       full: `Synthetic signal — generated, not measured from a person (seed ${provenance.seed})`,
     };
   }
+  if (snapshot.metadata?.device.kind === 'replay') {
+    const references = [...new Set((snapshot.metadata.channels ?? []).map((channel) => channel.reference))].join(', ');
+    return {
+      short: 'Recorded EEG',
+      full: `Replay of a recorded file (reference ${references || 'unknown'}). Sample times follow the playback clock, not a live amplifier clock.`,
+    };
+  }
   return { short: 'Device EEG', full: 'Device measurement (scalp EEG)' };
 }
 

@@ -7,7 +7,7 @@ import { compileFromFile } from 'json-schema-to-typescript';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 
-export const schemas = ['eeg-stream.v2', 'anatomy-asset.v1'].map((name) => ({
+export const schemas = ['eeg-stream.v2', 'anatomy-asset.v1', 'assistant.v1'].map((name) => ({
   name,
   schemaPath: resolve(root, `schemas/${name}.schema.json`),
   outputPath: resolve(root, `src/generated/${name}.ts`),

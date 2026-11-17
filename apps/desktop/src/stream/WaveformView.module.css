@@ -45,7 +45,7 @@
 
 .plot {
   display: grid;
-  grid-template-columns: 4.5rem minmax(0, 1fr);
+  grid-template-columns: max-content minmax(0, 1fr);
   height: 480px;
   min-height: 480px;
   width: 100%;
@@ -68,10 +68,10 @@
   color: var(--muted);
   font: inherit;
   font-size: 12px;
-  width: 100%;
+  width: auto;
   height: 100%;
   text-align: right;
-  padding: 0 8px 0 6px;
+  padding: 0 8px 0 8px;
   cursor: pointer;
 }
 

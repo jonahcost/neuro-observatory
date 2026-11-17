@@ -1,0 +1,14 @@
+{
+  "type": "assistant.intent-result",
+  "schemaVersion": 1,
+  "ok": true,
+  "intent": "emphasize_channels",
+  "message": "Selected O1, O2.",
+  "channels": ["O1", "O2"],
+  "primaryChannel": "O1",
+  "findingIds": ["finding-alpha"],
+  "displayMode": null,
+  "seekSampleIndex": null,
+  "sessionGeneration": 2,
+  "streamId": "stream-replay"
+}

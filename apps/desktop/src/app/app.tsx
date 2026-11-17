@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useState } from 'react';
 import { anatomyApiUrlFromEnv, createAnatomyClient } from '../anatomy/anatomyClient';
+import type { DisplayModeId } from '../anatomy/displayModes';
 import { AnatomyViewer } from '../anatomy/AnatomyViewer';
+import { AssistantPanel, assistantApiUrlFromEnv, type AssistantSelection } from '../assistant/AssistantPanel';
 import { EegStreamClient } from '../stream/eegStreamClient';
 import { StreamDetails, StreamStatusPanel } from '../stream/StreamStatusPanel';
 import { engineUrlFromEnv, useEegStream } from '../stream/useEegStream';
@@ -14,9 +16,26 @@ export function App() {
   const [anatomyClient] = useState(() => createAnatomyClient({ baseUrl: anatomyApiUrlFromEnv(import.meta.env) }));
   const [buffer] = useState(() => new WaveformBuffer());
   const [activity] = useState(() => new ChannelActivity());
+  const [assistantUrl] = useState(() => assistantApiUrlFromEnv(import.meta.env));
   const [selectedChannel, setSelectedChannel] = useState<string | null>(null);
+  const [emphasizedChannels, setEmphasizedChannels] = useState<readonly string[]>([]);
+  const [highlightRange, setHighlightRange] = useState<AssistantSelection['highlight']>(null);
+  const [requestedDisplayMode, setRequestedDisplayMode] = useState<{ nonce: number; mode: DisplayModeId } | null>(null);
+  const [assistantOpen, setAssistantOpen] = useState(true);
   const selectChannel = useCallback((label: string | null) => {
     setSelectedChannel(label);
+    setEmphasizedChannels(label === null ? [] : [label]);
+    setHighlightRange(null);
+  }, []);
+  const applyAssistant = useCallback((selection: AssistantSelection) => {
+    if (selection.channels.length > 0 || selection.primary !== null) {
+      setSelectedChannel(selection.primary);
+      setEmphasizedChannels(selection.channels);
+      setHighlightRange(selection.highlight);
+    }
+    if (selection.displayMode) {
+      setRequestedDisplayMode((current) => ({ nonce: (current?.nonce ?? 0) + 1, mode: selection.displayMode as DisplayModeId }));
+    }
   }, []);
   useEffect(() => {
     return client.onBlock((block, metadata) => {
@@ -45,17 +64,43 @@ export function App() {
         <StreamStatusPanel snapshot={snapshot} />
       </header>
       <div className={styles.workspace}>
+        <section className={styles.assistant} data-collapsed={assistantOpen ? 'false' : 'true'} aria-label="EEG assistant">
+          <h2 className={styles.assistantTitle}>
+            <button
+              type="button"
+              className={styles.assistantToggle}
+              aria-expanded={assistantOpen}
+              aria-controls="eeg-assistant-body"
+              aria-label={assistantOpen ? 'Collapse assistant' : 'Expand assistant'}
+              onClick={() => setAssistantOpen((open) => !open)}
+            >
+              Assistant
+              <span aria-hidden="true">{assistantOpen ? '‹' : '›'}</span>
+            </button>
+          </h2>
+          <div id="eeg-assistant-body" className={styles.assistantBody} hidden={!assistantOpen}>
+            <AssistantPanel baseUrl={assistantUrl} buffer={buffer} onSelection={applyAssistant} />
+          </div>
+        </section>
         <AnatomyViewer
           client={anatomyClient}
           activity={activity}
           selectedChannel={selectedChannel}
+          emphasizedChannels={emphasizedChannels}
+          requestedDisplayMode={requestedDisplayMode}
           viewportClassName={styles.viewport}
           inspectorClassName={styles.inspector}
         />
         <div className={styles.lower}>
           <StreamDetails snapshot={snapshot} />
           <div className={styles.dock}>
-            <WaveformView buffer={buffer} snapshot={snapshot} selectedChannel={selectedChannel} onSelectChannel={selectChannel} />
+            <WaveformView
+              buffer={buffer}
+              selectedChannel={selectedChannel}
+              emphasizedChannels={emphasizedChannels}
+              highlightRange={highlightRange}
+              onSelectChannel={selectChannel}
+            />
           </div>
         </div>
       </div>
