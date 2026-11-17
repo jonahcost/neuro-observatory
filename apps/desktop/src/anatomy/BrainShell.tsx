@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, type ReactNode } from 'react';
+import { useEffect, useMemo, useRef, type ReactNode, type RefObject } from 'react';
 import { Html } from '@react-three/drei';
 import { useFrame } from '@react-three/fiber';
 import {
@@ -14,6 +14,7 @@ import {
   type MeshBasicMaterial,
 } from 'three';
 import type { ChannelActivity } from '../stream/channelActivity';
+import { ELECTRODE_MARKER_COLOR, markerColor } from '../theme';
 import type { LoadedParcellation, LoadedSurface } from './anatomyClient';
 import { placeElectrodes, type PlacedElectrode } from './electrodeDisplay';
 import { buildPathwayFrame } from './pathway';
@@ -335,24 +336,31 @@ export function ElectrodeMarkers({
   electrodes,
   activity,
   visible,
+  selectedLabelRef,
 }: {
   electrodes: readonly PlacedElectrode[];
   activity: ChannelActivity;
   visible: boolean;
+  selectedLabelRef: RefObject<string | null>;
 }) {
   const materials = useRef(new Map<string, MeshBasicMaterial>());
   const labelNodes = useRef(new Map<string, HTMLSpanElement>());
   useFrame(() => {
     const display = activity.sampleDisplay(performance.now());
+    const selected = selectedLabelRef.current;
     for (const electrode of electrodes) {
       const intensity = display.byLabel.get(electrode.label)?.intensity ?? 0;
+      const color = markerColor(electrode.label, selected);
       const material = materials.current.get(electrode.label);
       if (material) {
         material.opacity = 0.18 + 0.82 * intensity;
+        material.color.set(color);
       }
       const label = labelNodes.current.get(electrode.label);
       if (label) {
         label.style.opacity = String(0.45 + 0.55 * intensity);
+        label.style.color = color;
+        label.style.fontWeight = electrode.label === selected ? '700' : '400';
       }
     }
   });
@@ -377,7 +385,7 @@ export function ElectrodeMarkers({
             }}
           >
             <sphereGeometry args={[ELECTRODE_MARKER_RADIUS_MM, 12, 8]} />
-            <meshBasicMaterial color="#9af7ff" transparent opacity={0.18} depthWrite={false} toneMapped={false} />
+            <meshBasicMaterial color={ELECTRODE_MARKER_COLOR} transparent opacity={0.18} depthWrite={false} toneMapped={false} />
           </mesh>
           <Html position={[0, 3.4, 0]} center zIndexRange={[2, 0]} style={{ pointerEvents: 'none' }}>
             <span
@@ -437,6 +445,7 @@ export function BrainShell({
   channelLabels,
   innerSurfaces,
   parcellations,
+  selectedLabelRef,
 }: {
   surfaces: readonly LoadedSurface[];
   preset: RenderPresetId;
@@ -446,6 +455,7 @@ export function BrainShell({
   channelLabels: readonly string[];
   innerSurfaces: readonly LoadedSurface[] | null;
   parcellations: readonly LoadedParcellation[] | null;
+  selectedLabelRef: RefObject<string | null>;
 }) {
   const kind = surfaces[0]?.surface ?? 'pial';
   const offsets = useMemo(() => displayOffsetsMm(surfaces, kind), [surfaces, kind]);
@@ -484,7 +494,7 @@ export function BrainShell({
   return (
     <group rotation={RAS_TO_SCENE_ROTATION}>
       {showMarker ? <InteriorMarker position={centre} /> : null}
-      <ElectrodeMarkers electrodes={electrodes} activity={activity} visible={kind !== 'inflated'} />
+      <ElectrodeMarkers electrodes={electrodes} activity={activity} visible={kind !== 'inflated'} selectedLabelRef={selectedLabelRef} />
       <PathwayLayer activity={activity} electrodes={electrodes} visible={showPathway} />
       {wire
         ? surfaces.map((surface) => (

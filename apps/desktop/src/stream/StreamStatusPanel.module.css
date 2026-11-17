@@ -1,0 +1,47 @@
+.panel {
+  flex: 1;
+  min-width: 0;
+  font-size: 13px;
+}
+
+.summary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 20px;
+  align-items: baseline;
+}
+
+.item {
+  margin: 0;
+}
+
+.kicker {
+  display: inline-block;
+  margin-right: 6px;
+  color: var(--muted);
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.details {
+  margin-top: 4px;
+}
+
+.details summary {
+  cursor: pointer;
+  color: var(--muted);
+}
+
+.details dl {
+  margin: 8px 0 0;
+}
+
+.details dt {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.details dd {
+  margin: 0 0 8px;
+}

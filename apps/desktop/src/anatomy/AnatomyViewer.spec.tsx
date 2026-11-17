@@ -67,16 +67,16 @@ describe('AnatomyViewer', () => {
   it('loads other surfaces and anatomical atlases on demand', async () => {
     const engine = setup();
     await waitFor(() => expect(screen.getByTestId('scene')).toBeTruthy());
-    fireEvent.change(screen.getByLabelText(/Surface/), { target: { value: 'inflated' } });
+    fireEvent.click(screen.getByRole('radio', { name: 'Inflated' }));
     await waitFor(() => expect(screen.getByText(/separated by 8 mm for display/)).toBeTruthy());
     expect(screen.getByText(/hidden on the inflated surface/)).toBeTruthy();
     expect(engine.requests).toContain('/assets/fsaverage-0001/files/rh.inflated.indices.u32');
     fireEvent.change(screen.getByLabelText(/atlas/i), { target: { value: 'aparc' } });
     await waitFor(() => expect(screen.getByText(/anatomical labels, not activity/)).toBeTruthy());
     expect(screen.getByText(/anatomical labels, not activity/)?.textContent).not.toContain('Hidden');
-    fireEvent.change(screen.getByLabelText('Rendering'), { target: { value: 'holographic' } });
-    expect(screen.getByText(/full-resolution surface behind the display lines/)).toBeTruthy();
-    fireEvent.change(screen.getByLabelText('Rendering'), { target: { value: 'grid' } });
+    fireEvent.click(screen.getByRole('radio', { name: 'Holographic' }));
+    await waitFor(() => expect(screen.getByText(/full-resolution surface behind the display lines/)).toBeTruthy());
+    fireEvent.click(screen.getByRole('radio', { name: 'Grid' }));
     expect(screen.getByText(/full-resolution surface behind the display lines/)).toBeTruthy();
   });
 
@@ -113,12 +113,11 @@ describe('AnatomyViewer', () => {
   it('switches rendering preset without another catalog request', async () => {
     const engine = setup();
     await waitFor(() => expect(screen.getByTestId('scene')).toBeTruthy());
-    const rendering = screen.getByLabelText('Rendering') as HTMLSelectElement;
-    expect(Array.from(rendering.options).map((option) => option.value)).toEqual(['solid', 'holographic', 'grid']);
-    expect(rendering.value).toBe('solid');
+    expect((screen.getByRole('radio', { name: 'Pial' }) as HTMLInputElement).checked).toBe(true);
+    expect((screen.getByRole('radio', { name: 'White matter boundary' }) as HTMLInputElement).disabled).toBe(true);
     const before = engine.requests.length;
-    fireEvent.change(rendering, { target: { value: 'grid' } });
-    expect((screen.getByLabelText('Rendering') as HTMLSelectElement).value).toBe('grid');
+    fireEvent.click(screen.getByRole('radio', { name: 'Grid' }));
+    expect((screen.getByRole('radio', { name: 'Grid' }) as HTMLInputElement).checked).toBe(true);
     expect(engine.requests.length).toBe(before);
     expect(screen.getByTestId('scene')).toBeTruthy();
     fireEvent.click(screen.getByLabelText('Pathway layer'));
@@ -139,8 +138,39 @@ describe('AnatomyViewer', () => {
     const client = createAnatomyClient({ baseUrl: BASE, fetchImpl: engine.fetchImpl, sha256: async (b) => hash(new Uint8Array(b)) });
     render(<AnatomyViewer client={client} activity={new ChannelActivity()} />);
     await waitFor(() => expect(screen.getByTestId('scene')).toBeTruthy());
-    fireEvent.change(screen.getByLabelText('Rendering'), { target: { value: 'holographic' } });
+    fireEvent.click(screen.getByRole('radio', { name: 'Holographic' }));
     await waitFor(() => expect(screen.getByText(/white-matter surface did not load/)).toBeTruthy());
     expect(screen.getByText(/scaled copy of the displayed surface/)).toBeTruthy();
+  });
+
+  it('keeps the scene mounted while the next surface loads', async () => {
+    const template = makeFakeAsset({
+      assetId: 'fsaverage-0001',
+      kind: 'template',
+      displayName: 'fsaverage template',
+      hash,
+      surfaces: ['pial', 'white', 'inflated'],
+    });
+    const engine = fakeAnatomyEngine(BASE, catalogFor([template], template.asset.assetId), [template]);
+    let release: () => void = () => undefined;
+    const blocked = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const fetchImpl: typeof fetch = async (input, init) => {
+      if (String(input).includes('.white.')) {
+        await blocked;
+      }
+      return engine.fetchImpl(input, init);
+    };
+    const client = createAnatomyClient({ baseUrl: BASE, fetchImpl, sha256: async (bytes) => hash(new Uint8Array(bytes)) });
+    render(<AnatomyViewer client={client} activity={new ChannelActivity()} />);
+    await waitFor(() => expect(screen.getByTestId('scene')).toBeTruthy());
+    fireEvent.click(screen.getByRole('radio', { name: 'White matter boundary' }));
+    expect(screen.getByTestId('scene')).toBeTruthy();
+    expect(screen.getByRole('status').textContent).toContain('Loading cortical surfaces');
+    release();
+    await waitFor(() => expect(screen.getByRole('status').textContent ?? '').not.toContain('Loading cortical surfaces'));
+    expect((screen.getByRole('radio', { name: 'White matter boundary' }) as HTMLInputElement).checked).toBe(true);
+    expect(screen.getByTestId('scene')).toBeTruthy();
   });
 });

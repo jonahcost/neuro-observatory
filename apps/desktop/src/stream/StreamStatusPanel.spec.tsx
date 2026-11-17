@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
 import { emptyIntegrityCounters, type StreamMetadata } from '@neuro-observatory/protocol';
 import type { EegStreamSnapshot } from './eegStreamClient';
@@ -49,6 +49,9 @@ describe('StreamStatusPanel', () => {
     render(<StreamStatusPanel snapshot={snapshot()} />);
     expect(screen.getByTestId('provenance').textContent).toContain('Synthetic signal');
     expect(screen.getByTestId('provenance').textContent).toContain('seed 7');
+    expect(screen.getByRole('status').textContent).toContain('Connected');
+    expect(screen.getByRole('status').textContent).toContain('Live');
+    fireEvent.click(screen.getByText('Stream details'));
     expect(screen.getByText(/16 × µV, reference synthetic, channel-major/)).toBeTruthy();
     expect(screen.getByText(/125 Hz nominal/)).toBeTruthy();
     expect(screen.getByText('99')).toBeTruthy();

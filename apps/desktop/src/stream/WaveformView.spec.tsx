@@ -1,4 +1,4 @@
-import { act, render, screen } from '@testing-library/react';
+import { act, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { emptyIntegrityCounters, type EegBlock, type StreamMetadata } from '@neuro-observatory/protocol';
 import type { EegStreamSnapshot } from './eegStreamClient';
@@ -255,5 +255,30 @@ describe('WaveformView', () => {
       pending?.(0);
     });
     expect(ops).toEqual(['move', 'line', 'stroke']);
+  });
+
+  it('selects a channel with a pressed state that is not only a color', () => {
+    vi.stubGlobal('requestAnimationFrame', () => 1);
+    vi.stubGlobal('cancelAnimationFrame', () => undefined);
+    const buffer = new WaveformBuffer();
+    const meta = metadata(LABELS);
+    buffer.append(
+      block(
+        meta,
+        0,
+        meta.channels.map(() => [0]),
+      ),
+      meta,
+      0,
+    );
+    const onSelect = vi.fn();
+    const { rerender } = render(<WaveformView buffer={buffer} snapshot={snapshot()} onSelectChannel={onSelect} />);
+    fireEvent.click(screen.getByRole('button', { name: 'Cz' }));
+    expect(onSelect).toHaveBeenCalledWith('Cz');
+    rerender(<WaveformView buffer={buffer} snapshot={snapshot()} selectedChannel="Cz" onSelectChannel={onSelect} />);
+    const selected = screen.getByRole('button', { name: 'Cz' });
+    expect(selected.getAttribute('aria-pressed')).toBe('true');
+    expect(selected.className).not.toBe('');
+    expect(screen.getByRole('button', { name: 'Fp1' }).getAttribute('aria-pressed')).toBe('false');
   });
 });

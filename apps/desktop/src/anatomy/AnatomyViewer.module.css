@@ -1,0 +1,115 @@
+.viewport {
+  position: relative;
+  min-width: 0;
+  min-height: 0;
+  background: var(--scene-bg, #07080c);
+}
+
+.scene {
+  position: absolute;
+  inset: 0;
+}
+
+.status,
+.alert {
+  position: absolute;
+  top: 12px;
+  left: 12px;
+  max-width: calc(100% - 24px);
+  z-index: 1;
+}
+
+.status {
+  pointer-events: none;
+}
+
+.inspector {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  color: var(--text, #e6e8ee);
+  font-size: 13px;
+}
+
+.modes {
+  margin: 0;
+}
+
+.group {
+  margin: 0 0 8px;
+  padding: 0;
+  border: 0;
+}
+
+.group legend {
+  margin-bottom: 4px;
+  color: var(--muted, #a8b0bd);
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.option {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 2px 0;
+  padding: 4px 8px;
+  border: 1px solid transparent;
+  border-radius: 4px;
+}
+
+.option:has(:checked) {
+  font-weight: 700;
+  border-color: var(--line, #2e3644);
+  box-shadow: inset 3px 0 0 var(--accent-cyan, #3cf0ff);
+  color: var(--accent-cyan, #3cf0ff);
+}
+
+.option:has(:disabled) {
+  color: var(--muted, #a8b0bd);
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-bottom: 8px;
+}
+
+.field select,
+.action {
+  font: inherit;
+  color: var(--text, #e6e8ee);
+  background: var(--surface-2, #222833);
+  border: 1px solid var(--line, #2e3644);
+  border-radius: 4px;
+  padding: 4px 6px;
+}
+
+.check {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 4px 0;
+}
+
+.note {
+  margin: 0;
+  color: var(--muted, #a8b0bd);
+}
+
+.provenance {
+  margin: 0;
+}
+
+.provenance dt {
+  color: var(--muted, #a8b0bd);
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.provenance dd {
+  margin: 0 0 8px;
+}

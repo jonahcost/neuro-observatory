@@ -1,5 +1,7 @@
-import { act, render, screen, waitFor, within } from '@testing-library/react';
+import { createHash } from 'node:crypto';
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { catalogFor, fakeAnatomyEngine, makeFakeAsset } from '../testing/fakeAnatomyEngine';
 
 // jsdom has no WebGL; the scene is out of scope for this test.
 vi.mock('@react-three/fiber', () => ({
@@ -52,6 +54,8 @@ describe('App', () => {
 
     expect(fetchMock).toHaveBeenCalledWith('http://127.0.0.1:8000/api/anatomy/v1/catalog', expect.anything());
     const anatomy = screen.getByRole('region', { name: 'Cortical anatomy' });
+    const waveforms = screen.getByRole('region', { name: 'EEG waveforms' });
+    expect(anatomy.compareDocumentPosition(waveforms) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     await waitFor(() => expect(within(anatomy).getByRole('status').textContent).toContain('No anatomy prepared yet'));
 
     unmount();
@@ -113,6 +117,78 @@ describe('App', () => {
     expect(plotted).toEqual(labels);
     expect(waveforms.textContent).toContain('Synthetic signal');
     expect(screen.queryByText(JSON.stringify(samples))).toBeNull();
+    unmount();
+  });
+
+  it('keeps the selected channel and the same socket when the display changes', async () => {
+    vi.stubGlobal('WebSocket', StubWebSocket);
+    vi.stubGlobal('requestAnimationFrame', () => 1);
+    vi.stubGlobal('cancelAnimationFrame', () => undefined);
+    const hash = (data: Uint8Array) => createHash('sha256').update(data).digest('hex');
+    const template = makeFakeAsset({
+      assetId: 'fsaverage-0001',
+      kind: 'template',
+      displayName: 'fsaverage template',
+      hash,
+      surfaces: ['pial', 'inflated'],
+    });
+    const engine = fakeAnatomyEngine(
+      'http://127.0.0.1:8000/api/anatomy/v1',
+      catalogFor([template], template.asset.assetId),
+      [template],
+    );
+    vi.stubGlobal('fetch', engine.fetchImpl);
+    const { App } = await import('./app');
+    const { unmount } = render(<App />);
+    await waitFor(() => expect(screen.getByTestId('scene')).toBeTruthy());
+
+    const labels = ['Fp1', 'Fp2', 'F3', 'F4', 'F7', 'F8', 'C3', 'C4', 'Cz', 'P3', 'P4', 'T7', 'T8', 'O1', 'O2', 'Pz'];
+    const metadata = {
+      type: 'stream.metadata',
+      schemaVersion: 2,
+      streamId: 'stream-a',
+      device: { kind: 'synthetic', model: 'neuro-observatory-synthetic-eeg', deviceId: 'synthetic-0', adapterVersion: '1.0.0' },
+      provenance: {
+        kind: 'synthetic',
+        generator: 'neuro_engine.acquisition.synthetic',
+        generatorVersion: '1',
+        seed: 0,
+        configHash: `sha256:${'ab'.repeat(32)}`,
+      },
+      nominalSampleRateHz: 125,
+      layout: 'channel-major',
+      channels: labels.map((label, index) => ({ index, label, type: 'EEG', unit: 'uV', reference: 'synthetic' })),
+      timebase: {
+        clock: 'engine-monotonic',
+        unit: 'us',
+        timestampSource: 'synthetic-nominal',
+        anchor: { monotonicUs: 0, unixTimeUs: 0 },
+      },
+    };
+    const eegBlock = {
+      type: 'eeg.block',
+      schemaVersion: 2,
+      streamId: 'stream-a',
+      blockSequence: 0,
+      firstSampleIndex: 0,
+      sampleCount: 1,
+      firstSampleTimeUs: 0,
+      droppedSamplesBefore: 0,
+      samples: labels.map(() => [0]),
+    };
+    const socket = StubWebSocket.instances.at(-1);
+    act(() => {
+      socket?.onopen?.(new Event('open'));
+      socket?.onmessage?.(new MessageEvent('message', { data: JSON.stringify(metadata) }));
+      socket?.onmessage?.(new MessageEvent('message', { data: JSON.stringify(eegBlock) }));
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: 'Cz' }));
+    expect(screen.getByRole('button', { name: 'Cz' }).getAttribute('aria-pressed')).toBe('true');
+    fireEvent.click(screen.getByRole('radio', { name: 'Grid' }));
+    expect(screen.getByRole('button', { name: 'Cz' }).getAttribute('aria-pressed')).toBe('true');
+    expect((screen.getByRole('radio', { name: 'Grid' }) as HTMLInputElement).checked).toBe(true);
+    expect(StubWebSocket.instances).toHaveLength(1);
     unmount();
   });
 });

@@ -212,7 +212,12 @@ export class WaveformBuffer {
     return runs;
   }
 
-  paint(ctx: CanvasRenderingContext2D, width: number, height: number): void {
+  paint(
+    ctx: CanvasRenderingContext2D,
+    width: number,
+    height: number,
+    emphasis?: { index: number; color: string } | null,
+  ): void {
     if (this.error || this.channels.length === 0 || this.count === 0 || width <= 0 || height <= 0) {
       return;
     }
@@ -230,9 +235,9 @@ export class WaveformBuffer {
       ctx.fillRect(0, laneTop + laneHeight / 2, width, 1);
     }
 
-    ctx.strokeStyle = TRACE_COLOR;
     for (let channel = 0; channel < this.channels.length; channel += 1) {
       const laneTop = channel * laneHeight;
+      ctx.strokeStyle = emphasis?.index === channel ? emphasis.color : TRACE_COLOR;
       const row = this.channels[channel];
       ctx.save();
       ctx.beginPath();
