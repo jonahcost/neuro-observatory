@@ -34,8 +34,8 @@ Non-goals: downloading weights, sending raw EEG or meshes to the model, a deskto
 
 ## Risks and Follow-ups
 
-Time to first token was not measured because weights are not installed. Metal GPU layers stay at the manifest default of 0 until a browser frame measurement says otherwise. ADR-0017 stays Proposed.
+Time to first token was not measured because weights are not installed. Metal GPU layers stay at the manifest default of 0 until a browser frame measurement says otherwise. The owner accepted ADR-0017 on 2026-11-17 with that follow-up still open.
 
 ## Human Review
 
-The owner directed implementation of the 04A plan on 2026-11-17. This record does not mark ADR-0017 Accepted.
+The owner directed implementation of the 04A plan on 2026-11-17 and accepted ADR-0017 on 2026-11-17.

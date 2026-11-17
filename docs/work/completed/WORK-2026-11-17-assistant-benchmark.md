@@ -47,4 +47,4 @@ These numbers are one local run, not a statistical benchmark and not a browser f
 
 ## Human Review
 
-The owner directed implementation of the 04A plan on 2026-11-17. This record does not mark ADR-0016 or ADR-0017 Accepted.
+The owner directed implementation of the 04A plan on 2026-11-17 and accepted ADR-0016 and ADR-0017 on 2026-11-17. Time to first token and the renderer frame interval remain unmeasured.

@@ -32,8 +32,8 @@ Non-goals: training or loading a classifier, calling the result a diagnosis or a
 
 ## Risks and Follow-ups
 
-The heuristic is not a held-out classifier comparison. A broadband burst can also emit a band-power finding. ADR-0018 stays Proposed until the owner accepts a later comparison or records that the heuristic remains the method.
+The heuristic is not a held-out classifier comparison. A broadband burst can also emit a band-power finding. The owner accepted ADR-0018 on 2026-11-17 as the heuristic with the classifier disabled. A classifier still needs a later ADR. Blink findings still store the frontal peak in `rmsUv`.
 
 ## Human Review
 
-The owner directed implementation of the 04A plan on 2026-11-17. This record does not mark ADR-0018 Accepted. A synthetic blink test is not acceptance of a classifier.
+The owner directed implementation of the 04A plan on 2026-11-17 and accepted ADR-0018 on 2026-11-17. A synthetic blink test is not acceptance of a classifier.

@@ -1,8 +1,8 @@
 # ADR-0017: Local llama.cpp assistant runtime
 
-- Status: Proposed
+- Status: Accepted
 - Date: 2026-11-17
-- Decision Owner: Project owner (implementation of the attached 04A plan was directed on 2026-11-17; this record stays Proposed until the owner marks it Accepted)
+- Decision Owner: Project owner (directed on 2026-11-17; accepted on 2026-11-17)
 - Related Work: `docs/work/completed/WORK-2026-11-17-local-llama-assistant.md`, `docs/work/completed/WORK-2026-11-17-assistant-benchmark.md`
 - Supersedes: None.
 

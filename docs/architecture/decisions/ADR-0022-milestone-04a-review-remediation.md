@@ -1,8 +1,8 @@
 # ADR-0022: Milestone 04A review remediation
 
-- Status: Proposed
+- Status: Accepted
 - Date: 2026-11-17
-- Decision Owner: Project owner
+- Decision Owner: Project owner (accepted on 2026-11-17)
 - Related Work: `docs/work/completed/WORK-2026-11-17-milestone-04a-review-remediation.md`
 - Supersedes: None. Corrects proposed ADR-0016 before acceptance. Leaves EEG protocol v2 unchanged.
 
@@ -29,7 +29,7 @@ The approved plan still rejects windows missing more than 5% of their samples. T
 5. The history counter increments when a stored sample is replaced. The analyzer reads acquisition health before each accepted block. Generation change cancels the in-flight llama connection. `recording.v1` stores `manifestSha256` over the metadata, and channel indexes must match their positions.
 6. A gap at or below 5% is replaced by the window mean only inside that spectral estimate. The finding keeps the accepted-sample fraction, and the template sentence says so. The occipital blink comparison uses the louder of O1 and O2.
 
-ADR-0016, ADR-0017, and ADR-0018 stay Proposed until the owner marks them Accepted.
+The owner accepted ADR-0016, ADR-0017, ADR-0018, and this record on 2026-11-17.
 
 ## Alternatives Considered
 
@@ -43,4 +43,4 @@ Gapped recordings seek and display on the declared indexes. Pause no longer fast
 
 ## Validation and Rollback
 
-Gap replay, pause-versus-a-moving-clock, seek-then-lock, stale findings, manifest tamper, EDF channel selection, health gating, model-prose replacement, and cancel-on-session-change are covered by engine tests. Desktop tests cover the recording-id seek guard, the replay status sentence, and a rejected pause. Rollback is a revert of this remediation. ADR-0016's corrected sentences should be accepted or rejected with it.
+Gap replay, pause-versus-a-moving-clock, seek-then-lock, stale findings, manifest tamper, EDF channel selection, health gating, model-prose replacement, and cancel-on-session-change are covered by engine tests. Desktop tests cover the recording-id seek guard, the replay status sentence, and a rejected pause. Rollback is a revert of this remediation. The owner accepted ADR-0016's corrected sentences with this record on 2026-11-17.

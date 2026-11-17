@@ -1,8 +1,8 @@
 # ADR-0016: Replay recordings and local EEG findings
 
-- Status: Proposed
+- Status: Accepted
 - Date: 2026-11-17
-- Decision Owner: Project owner (implementation of the attached 04A plan was directed on 2026-11-17; this record stays Proposed until the owner marks it Accepted)
+- Decision Owner: Project owner (directed on 2026-11-17; accepted on 2026-11-17)
 - Related Work: `docs/work/completed/WORK-2026-11-17-live-eeg-replay-and-findings.md`
 - Supersedes: None. Leaves EEG protocol v2 and anatomy v1 unchanged.
 
@@ -33,7 +33,7 @@ Verified on `04A/live-eeg-assistant` at `ffcb296`:
 
 ## Consequences
 
-Replay and templates work without a language model. Seek starts a new stream, so in-flight answers from the old generation are discarded. Spectral estimates are scalp measurements in the declared reference, not cortical source estimates. Replay keeps declared gap indexes as holes. A window missing more than 5% of its samples produces no qualified finding. A smaller hole is replaced by the mean of the finite samples only inside that spectral estimate, and the finding records the accepted-sample fraction. Imported EDF files keep their EEG labels, omit non-EEG channels, and are shown as file replay. Engine timestamps for those files are the playback clock. ADR-0022 records the review corrections to this proposed decision.
+Replay and templates work without a language model. Seek starts a new stream, so in-flight answers from the old generation are discarded. Spectral estimates are scalp measurements in the declared reference, not cortical source estimates. Replay keeps declared gap indexes as holes. A window missing more than 5% of its samples produces no qualified finding. A smaller hole is replaced by the mean of the finite samples only inside that spectral estimate, and the finding records the accepted-sample fraction. Imported EDF files keep their EEG labels, omit non-EEG channels, and are shown as file replay. Engine timestamps for those files are the playback clock. The review corrections are in `docs/architecture/decisions/ADR-0022-milestone-04a-review-remediation.md`, accepted with this record on 2026-11-17.
 
 ## Validation and Rollback
 

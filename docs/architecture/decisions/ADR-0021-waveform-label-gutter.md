@@ -1,8 +1,8 @@
 # ADR-0021: Tighten waveform channel labels
 
-- Status: Proposed
+- Status: Accepted
 - Date: 2026-11-17
-- Decision Owner: Project owner (requested 2026-11-17; this record stays Proposed until the owner marks it Accepted)
+- Decision Owner: Project owner (requested on 2026-11-17; accepted on 2026-11-17)
 - Related Work: `docs/work/completed/WORK-2026-11-17-waveform-label-gutter.md`
 - Supersedes: None. The 10 s window, ±100 µV scale, and lane order from ADR-0012 and ADR-0015 stay.
 

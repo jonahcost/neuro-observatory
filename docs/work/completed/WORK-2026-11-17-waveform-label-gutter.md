@@ -31,8 +31,8 @@ The plot’s first column is `max-content`. Channel buttons size to their text, 
 
 ## Risks and Follow-ups
 
-ADR-0021 stays Proposed until the owner accepts it. A longer channel name widens this column.
+The owner accepted ADR-0021 on 2026-11-17. A longer channel name widens this column.
 
 ## Human Review
 
-The owner requested this on 2026-11-17. This record does not mark ADR-0021 Accepted.
+The owner requested this on 2026-11-17 and accepted ADR-0021 on 2026-11-17.

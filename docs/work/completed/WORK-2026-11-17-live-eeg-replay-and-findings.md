@@ -35,7 +35,7 @@ Recording files live under the engine data root. Replay replaces the single-use 
 
 ## Risks and Follow-ups
 
-ADR-0016 stays Proposed until the owner marks it Accepted. The governance PR check requires that status, so this branch is not merge-ready until then. EEGMMIDB import is manual and is not part of CI. Renderer frame interval was not measured in a browser rAF loop; see the benchmark record.
+The owner accepted ADR-0016 on 2026-11-17. EEGMMIDB import is manual and is not part of CI. Renderer frame interval was not measured in a browser rAF loop; see the benchmark record.
 
 ## Post-review correction
 
@@ -43,4 +43,4 @@ The original checks replayed the gap-free alpha-step file. A later probe showed 
 
 ## Human Review
 
-The owner directed implementation of the 04A plan on 2026-11-17. This record does not mark ADR-0016 Accepted.
+The owner directed implementation of the 04A plan on 2026-11-17 and accepted ADR-0016 on 2026-11-17.

@@ -33,8 +33,8 @@ The workspace is three columns: the assistant card, the live brain with the wave
 
 ## Risks and Follow-ups
 
-The open card narrows the brain. ADR-0019 stays Proposed until the owner accepts it.
+The open card narrows the brain. The owner accepted ADR-0019 on 2026-11-17.
 
 ## Human Review
 
-The owner requested this placement on 2026-11-17. This record does not mark ADR-0019 Accepted.
+The owner requested this placement on 2026-11-17 and accepted ADR-0019 on 2026-11-17.

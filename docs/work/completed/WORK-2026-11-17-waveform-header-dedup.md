@@ -31,8 +31,8 @@ Non-goals: header copy, stream details, waveform gap drawing, and the assistant.
 
 ## Risks and Follow-ups
 
-ADR-0020 stays Proposed until the owner accepts it. The waveform card no longer states provenance on its own.
+The owner accepted ADR-0020 on 2026-11-17. The waveform card no longer states provenance on its own.
 
 ## Human Review
 
-The owner requested this removal on 2026-11-17. This record does not mark ADR-0020 Accepted.
+The owner requested this removal on 2026-11-17 and accepted ADR-0020 on 2026-11-17.

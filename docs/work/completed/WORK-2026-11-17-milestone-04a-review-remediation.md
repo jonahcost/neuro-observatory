@@ -12,7 +12,7 @@ Correct the replay, baseline, finding-provenance, and file-import defects reprod
 
 In scope: gap indexes in `ReplayEegAdapter`, pause deadlines, stream-relative baseline lock, stale findings, recording-id seek, EDF EEG-only µV conversion, replay status copy, history expiry count, acquisition-health gate, llama cancel on session change, measurement-backed answers, session error text, `manifestSha256`, and the louder occipital blink comparison.
 
-Non-goals: changing EEG protocol v2, marking ADR-0016, ADR-0017, ADR-0018, or ADR-0022 Accepted, downloading weights, and measuring llama time to first token.
+Non-goals of the code change: changing EEG protocol v2, downloading weights, and measuring llama time to first token. The owner accepted the ADRs afterward.
 
 ## Acceptance Criteria
 
@@ -37,8 +37,8 @@ Replay recomputes the sample index at each present run and adds paused time to l
 
 ## Risks and Follow-ups
 
-ADR-0022 and ADR-0016 through ADR-0018 stay Proposed. `python3 tools/governance/check_governance.py --base ffcb296 --head HEAD` will fail until the owner marks the changed ADRs Accepted. Mean substitution of gaps at or below 5% can still bias a band-power estimate; the fraction is stored and the sentence discloses it. EDF discontinuities are still not imported as gaps. Phase 6 still has no measured time to first token or browser frame interval.
+The owner accepted ADR-0016, ADR-0017, ADR-0018, and `ADR-0022-milestone-04a-review-remediation` on 2026-11-17. Mean substitution of gaps at or below 5% can still bias a band-power estimate; the fraction is stored and the sentence discloses it. EDF discontinuities are still not imported as gaps. Phase 6 still has no measured time to first token or browser frame interval. Blink findings still store the frontal peak in `rmsUv`.
 
 ## Human Review
 
-The owner has not marked ADR-0022 Accepted. This record does not change that status.
+The owner accepted this remediation, together with ADR-0016, ADR-0017, and ADR-0018, on 2026-11-17.
