@@ -1,8 +1,8 @@
 # ADR-0022: Wait long enough for a cold local model to become ready
 
-- Status: Proposed
+- Status: Accepted
 - Date: 2026-11-17
-- Decision Owner: Project owner (this record stays Proposed until the owner marks it Accepted)
+- Decision Owner: Project owner (accepted on 2026-11-17)
 - Related Work: `docs/work/completed/WORK-2026-11-17-assistant-model-ready-wait.md`
 - Supersedes: None. ADR-0017 still owns the loopback `llama-server`, the checksum, and the 30 s request timeout.
 

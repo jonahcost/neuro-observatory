@@ -1,8 +1,8 @@
 # ADR-0023: Show assistant command feedback, and do not seek from a question
 
-- Status: Proposed
+- Status: Accepted
 - Date: 2026-11-17
-- Decision Owner: Project owner (this record stays Proposed until the owner marks it Accepted)
+- Decision Owner: Project owner (accepted on 2026-11-17)
 - Related Work: `docs/work/completed/WORK-2026-11-17-assistant-command-feedback.md`
 - Supersedes: None. The closed lexicon in ADR-0016 still owns explicit commands such as “show me that segment.”
 

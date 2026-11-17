@@ -32,8 +32,8 @@ The ready poll now runs until `/health` succeeds or 120 seconds pass. It is stil
 
 ## Risks and Follow-ups
 
-ADR-0022 stays Proposed until the owner accepts it. The engine process that produced the unavailable snapshot is still running the old 5 second poll until it is restarted.
+The owner accepted `ADR-0022-assistant-model-ready-wait.md` on 2026-11-17. The engine process that produced the unavailable snapshot is still running the old 5 second poll until it is restarted.
 
 ## Human Review
 
-The owner hit `model: unavailable` while `llama-server` was already healthy on 2026-11-17. This record does not mark ADR-0022 Accepted.
+The owner hit `model: unavailable` while `llama-server` was already healthy on 2026-11-17 and accepted `ADR-0022-assistant-model-ready-wait.md` on 2026-11-17.

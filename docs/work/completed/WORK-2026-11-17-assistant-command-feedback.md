@@ -32,8 +32,8 @@ Send clears the field, disables itself, and shows “Asking the local model…�
 
 ## Risks and Follow-ups
 
-ADR-0023 stays Proposed until the owner accepts it. The local model still cannot give a textbook explanation of electrode names; it can clarify or cite a finding.
+The owner accepted ADR-0023 on 2026-11-17. The local model still cannot give a textbook explanation of electrode names; it can clarify or cite a finding.
 
 ## Human Review
 
-The owner reported this on 2026-11-17. This record does not mark ADR-0023 Accepted.
+The owner reported this on 2026-11-17 and accepted ADR-0023 on 2026-11-17.
