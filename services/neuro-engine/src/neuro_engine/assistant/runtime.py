@@ -20,6 +20,8 @@ from neuro_engine.recordings.v1 import RecordingError
 
 MODEL_DIR = "models"
 MANIFEST_NAME = "assistant.json"
+READY_TIMEOUT_S = 120.0
+READY_POLL_S = 0.25
 INTENT_SCHEMA: dict[str, Any] = {
     "type": "object",
     "additionalProperties": False,
@@ -154,7 +156,8 @@ class LlamaRuntime:
         asyncio.create_task(self._await_ready())
 
     async def _await_ready(self) -> None:
-        for _ in range(20):
+        deadline = asyncio.get_running_loop().time() + READY_TIMEOUT_S
+        while True:
             if self._process is None or self._process.returncode is not None:
                 self.status = "unavailable"
                 self.reason = "runtime-missing"
@@ -162,13 +165,15 @@ class LlamaRuntime:
             try:
                 await asyncio.to_thread(self._ping)
             except (URLError, TimeoutError, OSError):
-                await asyncio.sleep(0.25)
+                if asyncio.get_running_loop().time() >= deadline:
+                    self.status = "unavailable"
+                    self.reason = "runtime-missing"
+                    return
+                await asyncio.sleep(READY_POLL_S)
                 continue
             self.status = "ready"
             self.reason = ""
             return
-        self.status = "unavailable"
-        self.reason = "runtime-missing"
 
     def _ping(self) -> None:
         with request.urlopen(f"http://127.0.0.1:{self.port}/health", timeout=0.5) as response:

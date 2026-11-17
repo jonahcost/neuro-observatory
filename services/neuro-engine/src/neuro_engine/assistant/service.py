@@ -9,7 +9,7 @@ from typing import Any
 from neuro_engine.acquisition.service import AcquisitionState
 from neuro_engine.analysis.band_power import FindingStore
 from neuro_engine.analysis.blink import CLASSIFIER_ENABLED
-from neuro_engine.assistant.commands import execute, parse_text
+from neuro_engine.assistant.commands import execute, normalize, parse_text
 from neuro_engine.assistant.runtime import INTENT_SCHEMA, LlamaRuntime, ModelUnavailable
 from neuro_engine.assistant.session import SessionController
 from neuro_engine.protocol.assistant_v1 import document_dict, parse_document
@@ -19,7 +19,9 @@ _SYSTEM = (
     "Do not invent channels, times, or measurements. If evidence is missing, stale, or low quality, say so. "
     "Scalp band power is not a cortical image and not a diagnosis. "
     "Synthetic findings are generated, not measured from a person. "
-    "Reply with one JSON object matching the schema. Use only finding ids that appear in the prompt."
+    "Reply with one JSON object matching the schema. Use only finding ids that appear in the prompt. "
+    "Use seek_to_finding only when the user asks to show or jump to a segment. "
+    "Use clarify for a question that the findings do not answer."
 )
 
 
@@ -63,7 +65,7 @@ class AssistantService:
             text = str(body.get("text") or "")
             proposal = parse_text(text)
             if proposal is None:
-                proposal = await self._model_proposal(text)
+                proposal = _decline_unasked_action(text, await self._model_proposal(text))
         if proposal.get("intent") == "cancelled":
             cancelled = await execute(
                 {"intent": "clarify", "clarification": "Cancelled because the session changed."},
@@ -129,6 +131,30 @@ class AssistantService:
         if self.session.generation != started:
             return {"intent": "cancelled", "clarification": "Cancelled because the session changed."}
         return _proposal_from_completion(payload)
+
+
+def _decline_unasked_action(text: str, proposal: dict[str, Any]) -> dict[str, Any]:
+    """A free-form question is not a seek, marker, baseline, or display command."""
+    intent = proposal.get("intent")
+    if intent in {"seek_to_finding", "add_marker", "lock_baseline", "set_display_mode"}:
+        return {
+            "intent": "clarify",
+            "clarification": (
+                "I only jump to a segment when you ask to show one, and only during replay. "
+                "I can highlight named channels or cite a finding. I left this stream where it is."
+            ),
+        }
+    if intent != "emphasize_channels":
+        return proposal
+    phrase = normalize(text)
+    supplied = proposal.get("channels")
+    named = [str(item) for item in supplied if str(item).lower() in phrase] if isinstance(supplied, list) else []
+    if not named:
+        return {
+            "intent": "clarify",
+            "clarification": "Name the channels you want highlighted, or ask which channels changed most.",
+        }
+    return {**proposal, "channels": named}
 
 
 def _proposal_from_completion(payload: dict[str, Any]) -> dict[str, Any]:

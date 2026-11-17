@@ -1,9 +1,12 @@
 from __future__ import annotations
 
+import asyncio
 from pathlib import Path
+from urllib.error import URLError
 
 import pytest
 
+from neuro_engine.assistant import runtime as runtime_module
 from neuro_engine.assistant.runtime import LlamaRuntime
 from neuro_engine.recordings.v1 import RecordingError
 
@@ -31,8 +34,6 @@ def test_startup_without_a_manifest_stays_unavailable(tmp_path: Path) -> None:
         await runtime.startup()
         return runtime.reason
 
-    import asyncio
-
     assert asyncio.run(start()) == "not-installed"
     assert runtime.status == "unavailable"
 
@@ -49,3 +50,40 @@ def test_cancel_closes_the_inflight_connection(tmp_path: Path) -> None:
     runtime.cancel()
     assert closed["value"] is True
     assert runtime._connection is None
+
+
+class _Alive:
+    returncode = None
+
+
+def test_ready_wait_accepts_health_after_the_old_five_second_window(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    runtime = LlamaRuntime(tmp_path, enabled=True)
+    runtime.status = "starting"
+    runtime._process = _Alive()  # type: ignore[assignment]
+    calls = {"n": 0}
+
+    def late() -> None:
+        calls["n"] += 1
+        if calls["n"] < 30:
+            raise URLError("still-loading")
+
+    monkeypatch.setattr(runtime, "_ping", late)
+    monkeypatch.setattr(runtime_module, "READY_POLL_S", 0.0)
+    asyncio.run(runtime._await_ready())
+    assert calls["n"] == 30
+    assert runtime.status == "ready"
+    assert runtime.reason == ""
+
+
+def test_ready_wait_gives_up_when_health_never_answers(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    runtime = LlamaRuntime(tmp_path, enabled=True)
+    runtime.status = "starting"
+    runtime._process = _Alive()  # type: ignore[assignment]
+    def down() -> None:
+        raise URLError("down")
+
+    monkeypatch.setattr(runtime_module, "READY_TIMEOUT_S", 0.0)
+    monkeypatch.setattr(runtime, "_ping", down)
+    asyncio.run(runtime._await_ready())
+    assert runtime.status == "unavailable"
+    assert runtime.reason == "runtime-missing"

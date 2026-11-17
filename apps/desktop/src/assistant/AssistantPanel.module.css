@@ -10,6 +10,12 @@
   font-size: 12px;
 }
 
+.reply {
+  margin: 0;
+  color: var(--text, #e7edf5);
+  font-size: 13px;
+}
+
 .form,
 .actions {
   display: flex;

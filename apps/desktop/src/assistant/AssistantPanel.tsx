@@ -66,6 +66,7 @@ export function AssistantPanel({
   const [note, setNote] = useState('Waiting for assistant status.');
   const [reply, setReply] = useState<string | null>(null);
   const [draft, setDraft] = useState('');
+  const [sending, setSending] = useState(false);
   const [recordingId, setRecordingId] = useState('alpha-step');
 
   useEffect(() => {
@@ -126,6 +127,8 @@ export function AssistantPanel({
   };
 
   const send = async (body: unknown) => {
+    setSending(true);
+    setReply('Asking the local model…');
     try {
       const posted = await postJson(`${baseUrl}/intent`, body, new AbortController().signal);
       if (!posted.ok) {
@@ -147,6 +150,8 @@ export function AssistantPanel({
       setReply(applied.message);
     } catch {
       setReply('The assistant command did not complete. The EEG view is unchanged.');
+    } finally {
+      setSending(false);
     }
   };
 
@@ -167,16 +172,16 @@ export function AssistantPanel({
         {note}
         {snapshot ? ` Evidence: ${snapshot.evidence}.` : ''}
       </p>
-      {reply ? <p className={styles.note}>{reply}</p> : null}
       <p className={styles.note}>Channel measurements are scalp values. They are not a cortical image or a diagnosis.</p>
       <form
         className={styles.form}
         onSubmit={(event) => {
           event.preventDefault();
           const text = draft.trim();
-          if (!text) {
+          if (!text || sending) {
             return;
           }
+          setDraft('');
           void send({ text, sessionGeneration: snapshot?.sessionGeneration ?? 0 });
         }}
       >
@@ -184,8 +189,15 @@ export function AssistantPanel({
           Command
         </label>
         <input id="assistant-command" value={draft} onChange={(event) => setDraft(event.target.value)} />
-        <button type="submit">Send</button>
+        <button type="submit" disabled={sending}>
+          Send
+        </button>
       </form>
+      {reply ? (
+        <p className={styles.reply} role="status">
+          {reply}
+        </p>
+      ) : null}
       <div className={styles.actions}>
         <button type="button" onClick={() => void session({ action: 'pause' })}>
           Pause

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import json
 from pathlib import Path
 
 from neuro_engine.acquisition.clock import VirtualClock
@@ -203,3 +204,23 @@ def test_model_prose_is_replaced_by_the_stored_measurement(tmp_path: Path) -> No
     assert "1000" not in result["message"]
     assert "+9.5 dB" in result["message"]
     assert "generated, not measured" in result["message"]
+
+
+def test_an_explanation_question_is_not_a_seek(tmp_path: Path) -> None:
+    session, _store, assistant = _session(tmp_path)
+
+    async def transport(_messages, _schema):
+        return {"choices": [{"message": {"content": json.dumps({"intent": "seek_to_finding"})}}]}
+
+    assistant.model.use_transport(transport)
+
+    async def run() -> dict:
+        await session.service.start()
+        result = await assistant.intent({"text": "Explain Fp1 and Fp2 to me", "sessionGeneration": session.generation})
+        await session.service.stop()
+        return result
+
+    result = asyncio.run(run())
+    assert result["intent"] == "clarify"
+    assert "cannot jump backward" not in result["message"]
+    assert "left this stream" in result["message"]
